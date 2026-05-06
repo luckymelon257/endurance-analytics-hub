@@ -1,0 +1,30 @@
+version: '3.8'
+
+services:
+  # PostgreSQL Database
+  db:
+    image: postgres:15-alpine
+    container_name: endurance_pg
+    restart: always
+    environment:
+      POSTGRES_USER: admin
+      POSTGRES_PASSWORD: password123
+      POSTGRES_DB: endurance_db
+    ports:
+      - '5432:5432'
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+
+  # Redis Cache
+  redis:
+    image: redis:7-alpine
+    container_name: endurance_redis
+    restart: always
+    ports:
+      - '6379:6379'
+    volumes:
+      - redisdata:/data
+
+volumes:
+  pgdata:
+  redisdata:
