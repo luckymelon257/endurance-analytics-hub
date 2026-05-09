@@ -2,6 +2,20 @@
 <%- include('partials/navbar', { user }) %>
 
 <div class="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8 py-8 min-h-screen flex flex-col">
+  <% if (stravaFlash === 'connected') { %>
+    <div class="mb-6 rounded-lg bg-green-50 px-4 py-3 text-sm text-green-700 ring-1 ring-green-600/20">
+      Strava connected. Your recent activities are syncing in the background — refresh in a moment.
+    </div>
+  <% } else if (stravaFlash === 'new') { %>
+    <div class="mb-6 rounded-lg bg-blue-50 px-4 py-3 text-sm text-blue-700 ring-1 ring-blue-600/20">
+      Welcome! We created your account from your Strava profile. Set a real email and password from your profile when you're ready.
+    </div>
+  <% } else if (stravaFlash === 'disconnected') { %>
+    <div class="mb-6 rounded-lg bg-gray-50 px-4 py-3 text-sm text-gray-700 ring-1 ring-gray-300">
+      Strava disconnected.
+    </div>
+  <% } %>
+
   <div class="mb-8">
     <h1 class="text-2xl font-bold text-gray-900">Welcome back, <%= user.firstName %>!</h1>
     <p class="mt-1 text-sm text-gray-500">
@@ -10,6 +24,46 @@
         <%= user.role %>
       </span>
     </p>
+  </div>
+
+  <!-- Strava integration -->
+  <div class="mb-8 overflow-hidden rounded-xl bg-white shadow-sm ring-1 ring-gray-200">
+    <div class="flex items-center justify-between px-6 py-4">
+      <div class="flex items-center gap-3">
+        <span class="text-2xl" aria-hidden="true">🟧</span>
+        <div>
+          <p class="text-sm font-semibold text-gray-900">Strava</p>
+          <% if (stravaConnected) { %>
+            <p class="text-xs text-gray-500">
+              Connected<% if (stravaAthleteName) { %> as <%= stravaAthleteName %><% } %>
+            </p>
+          <% } else { %>
+            <p class="text-xs text-gray-500">Not connected — link your account to import activities.</p>
+          <% } %>
+        </div>
+      </div>
+      <div class="flex items-center gap-2">
+        <% if (stravaConnected) { %>
+          <form method="POST" action="/strava/sync">
+            <button type="submit"
+              class="rounded-lg bg-blue-600 px-3 py-1.5 text-sm font-semibold text-white shadow-sm hover:bg-blue-700">
+              Sync from Strava
+            </button>
+          </form>
+          <form method="POST" action="/strava/disconnect">
+            <button type="submit"
+              class="rounded-lg border border-gray-300 bg-white px-3 py-1.5 text-sm font-semibold text-gray-700 shadow-sm hover:bg-gray-50">
+              Disconnect
+            </button>
+          </form>
+        <% } else { %>
+          <a href="/auth/strava/connect"
+            class="rounded-lg bg-orange-600 px-3 py-1.5 text-sm font-semibold text-white shadow-sm hover:bg-orange-700">
+            Link Strava
+          </a>
+        <% } %>
+      </div>
+    </div>
   </div>
 
   <!-- Stats grid -->

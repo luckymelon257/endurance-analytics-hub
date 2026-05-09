@@ -1,34 +1,37 @@
 import { CanActivate, ExecutionContext, Injectable } from '@nestjs/common'
-import { ConfigService } from '@nestjs/config'
 import { JwtService } from '@nestjs/jwt'
+import { User } from '@prisma/client'
 import { Request, Response } from 'express'
+import { JWT_SECRET } from '../../config/env'
+import { AUTH_COOKIE_NAME } from '../../constants/auth'
 import { PrismaService } from '../../prisma/prisma.service'
+
+interface AuthedRequest extends Request {
+  user?: User
+}
 
 @Injectable()
 export class WebAuthGuard implements CanActivate {
   constructor(
     private readonly jwt: JwtService,
     private readonly prisma: PrismaService,
-    private readonly config: ConfigService,
   ) {}
 
-  async canActivate(context: ExecutionContext): Promise<boolean> {
-    const req = context.switchToHttp().getRequest<Request>()
+  public async canActivate(context: ExecutionContext): Promise<boolean> {
+    const req = context.switchToHttp().getRequest<AuthedRequest>()
     const res = context.switchToHttp().getResponse<Response>()
 
-    const token: string | undefined = (req as any).cookies?.access_token
+    const token: string | undefined = req.cookies?.[AUTH_COOKIE_NAME]
     if (!token) {
       res.redirect('/auth/login')
       return false
     }
 
     try {
-      const payload = this.jwt.verify<{ sub: string }>(token, {
-        secret: this.config.get<string>('JWT_SECRET'),
-      })
+      const payload = this.jwt.verify<{ sub: string }>(token, { secret: JWT_SECRET })
       const user = await this.prisma.user.findUnique({ where: { id: payload.sub } })
       if (!user) throw new Error()
-      ;(req as any).user = user
+      req.user = user
       return true
     } catch {
       res.redirect('/auth/login')

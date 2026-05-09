@@ -1,0 +1,36 @@
+<%- include('../partials/head', { title }) %>
+<%- include('../partials/navbar', {}) %>
+
+<div class="flex min-h-[calc(100vh-4rem)] items-center justify-center py-12 px-4">
+  <div class="w-full max-w-md text-center">
+    <div class="mx-auto mb-6 flex h-14 w-14 items-center justify-center rounded-full bg-blue-50 ring-1 ring-blue-600/10">
+      <svg class="h-7 w-7 text-blue-600" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor">
+        <path stroke-linecap="round" stroke-linejoin="round" d="M21.75 6.75v10.5a2.25 2.25 0 01-2.25 2.25h-15a2.25 2.25 0 01-2.25-2.25V6.75m19.5 0A2.25 2.25 0 0019.5 4.5h-15a2.25 2.25 0 00-2.25 2.25m19.5 0v.243a2.25 2.25 0 01-1.07 1.916l-7.5 4.615a2.25 2.25 0 01-2.36 0L3.32 8.91a2.25 2.25 0 01-1.07-1.916V6.75" />
+      </svg>
+    </div>
+    <h2 class="text-2xl font-bold text-gray-900 mb-2">Check your inbox</h2>
+    <p class="text-sm text-gray-600 mb-8">
+      <% if (email) { %>
+        We sent a verification link to <strong class="text-gray-900"><%= email %></strong>.
+      <% } else { %>
+        We sent a verification link to your email address.
+      <% } %>
+      Click the link to activate your account.
+    </p>
+
+    <form method="POST" action="/auth/resend-verification" class="space-y-3">
+      <input type="hidden" name="email" value="<%= email %>" />
+      <button type="submit"
+        class="w-full rounded-lg border border-gray-300 bg-white py-2 text-sm font-semibold text-gray-700 shadow-sm
+               hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-blue-600 focus:ring-offset-2">
+        Resend verification email
+      </button>
+    </form>
+
+    <p class="mt-6 text-sm text-gray-500">
+      Already verified? <a href="/auth/login" class="text-blue-600 hover:underline font-medium">Sign in</a>
+    </p>
+  </div>
+</div>
+
+<%- include('../partials/footer') %>

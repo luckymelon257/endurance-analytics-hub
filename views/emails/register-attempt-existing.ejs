@@ -1,0 +1,19 @@
+<!DOCTYPE html>
+<html>
+<body style="font-family: -apple-system, BlinkMacSystemFont, sans-serif; max-width: 560px; margin: 0 auto; padding: 24px; color: #111;">
+  <h2 style="color: #b45309;">Someone tried to sign up with your email</h2>
+  <p>Hi <%= firstName %>,</p>
+  <p>We just received a sign-up attempt using your email address. You already have an Endurance Analytics Hub account.</p>
+  <p><strong>If it was you</strong>, you can sign in directly:</p>
+  <p style="margin: 24px 0;">
+    <a href="<%= loginUrl %>"
+       style="background: #2563eb; color: #fff; padding: 12px 24px; border-radius: 8px; text-decoration: none; font-weight: 600;">
+      Sign in
+    </a>
+  </p>
+  <p>Forgot your password? <a href="<%= forgotUrl %>" style="color: #2563eb;">Reset it here</a>.</p>
+  <p style="color: #999; font-size: 12px; margin-top: 32px;">
+    If it wasn't you, you can safely ignore this email — no new account was created.
+  </p>
+</body>
+</html>

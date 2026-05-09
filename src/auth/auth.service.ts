@@ -1,73 +1,118 @@
 import {
   BadRequestException,
-  ConflictException,
   Injectable,
   NotFoundException,
   UnauthorizedException,
 } from '@nestjs/common'
-import { ConfigService } from '@nestjs/config'
 import { JwtService } from '@nestjs/jwt'
-import { UserStatus } from '@prisma/client'
+import { User, UserStatus } from '@prisma/client'
 import * as bcrypt from 'bcrypt'
 import { randomBytes } from 'crypto'
+import { Response } from 'express'
+import { CacheService } from '../cache/cache.service'
+import { OperationMessage } from '../common/types'
+import { APP_URL, IS_PRODUCTION } from '../config/env'
+import {
+  AUTH_COOKIE_MAX_AGE_MS,
+  AUTH_COOKIE_NAME,
+  BCRYPT_ROUNDS,
+  RATE_LIMIT_MAX,
+  TOKEN_BYTES,
+} from '../constants/auth'
+import {
+  emailVerifyTokenKey,
+  emailVerifyUserKey,
+  passwordResetTokenKey,
+  rateLimitVerifyKey,
+} from '../constants/cache-keys'
+import {
+  EMAIL_VERIFY_TTL_SECONDS,
+  PASSWORD_RESET_TTL_SECONDS,
+  RATE_LIMIT_WINDOW_SECONDS,
+} from '../constants/ttl'
+import { MailerService } from '../mailer/mailer.service'
 import { PrismaService } from '../prisma/prisma.service'
-import { RedisService } from '../redis/redis.service'
 import { ForgotPasswordDto } from './dto/forgot-password.dto'
 import { LoginDto } from './dto/login.dto'
 import { RegisterDto } from './dto/register.dto'
+import { ResendVerificationDto } from './dto/resend-verification.dto'
 import { ResetPasswordDto } from './dto/reset-password.dto'
-
-const EMAIL_VERIFY_TTL = 60 * 60 * 24     // 24 hours
-const PWD_RESET_TTL    = 60 * 60           // 1 hour
-const BCRYPT_ROUNDS    = 12
 
 @Injectable()
 export class AuthService {
   constructor(
     private readonly prisma: PrismaService,
-    private readonly redis: RedisService,
+    private readonly cache: CacheService,
+    private readonly mailer: MailerService,
     private readonly jwt: JwtService,
-    private readonly config: ConfigService,
   ) {}
 
-  async register(dto: RegisterDto) {
-    const exists = await this.prisma.user.findUnique({ where: { email: dto.email } })
-    if (exists) throw new ConflictException('Email already registered')
+  public async register(dto: RegisterDto): Promise<void> {
+    const count = await this.cache.increment(
+      rateLimitVerifyKey(dto.email),
+      RATE_LIMIT_WINDOW_SECONDS,
+    )
+    if (count > RATE_LIMIT_MAX) return
 
-    const passwordHash = await bcrypt.hash(dto.password, BCRYPT_ROUNDS)
-    const user = await this.prisma.user.create({
-      data: {
-        email: dto.email,
-        firstName: dto.firstName,
-        lastName: dto.lastName,
-        passwordHash,
+    const existing = await this.prisma.user.findUnique({ where: { email: dto.email } })
+
+    if (!existing) {
+      const passwordHash = await bcrypt.hash(dto.password, BCRYPT_ROUNDS)
+      const user = await this.prisma.user.create({
+        data: {
+          email: dto.email,
+          firstName: dto.firstName,
+          lastName: dto.lastName,
+          passwordHash,
+        },
+      })
+      await this.issueVerificationToken(user)
+      return
+    }
+
+    if (existing.status === UserStatus.PENDING) {
+      await this.issueVerificationToken(existing)
+      return
+    }
+
+    await this.mailer.sendMail({
+      to: existing.email,
+      subject: 'Someone tried to sign up with your email',
+      template: 'register-attempt-existing',
+      context: {
+        firstName: existing.firstName,
+        loginUrl: `${APP_URL}/auth/login`,
+        forgotUrl: `${APP_URL}/auth/forgot-password`,
       },
     })
-
-    const token = randomBytes(32).toString('hex')
-    await this.redis.set(`email_verify:${token}`, user.id, EMAIL_VERIFY_TTL)
-
-    // TODO: send verification email with token
-    // In dev, the token is logged for manual testing
-    console.log(`[DEV] Email verify link: /auth/verify-email?token=${token}`)
-
-    return { message: 'Registration successful. Check your email to activate your account.' }
   }
 
-  async verifyEmail(token: string) {
-    const userId = await this.redis.get(`email_verify:${token}`)
+  public async resendVerification(dto: ResendVerificationDto): Promise<void> {
+    const count = await this.cache.increment(
+      rateLimitVerifyKey(dto.email),
+      RATE_LIMIT_WINDOW_SECONDS,
+    )
+    if (count > RATE_LIMIT_MAX) return
+
+    const user = await this.prisma.user.findUnique({ where: { email: dto.email } })
+    if (user?.status === UserStatus.PENDING) {
+      await this.issueVerificationToken(user)
+    }
+  }
+
+  public async verifyEmail(token: string): Promise<void> {
+    const userId = await this.cache.get(emailVerifyTokenKey(token))
     if (!userId) throw new BadRequestException('Invalid or expired verification link')
 
     await this.prisma.user.update({
       where: { id: userId },
       data: { status: UserStatus.ACTIVE },
     })
-    await this.redis.del(`email_verify:${token}`)
-
-    return { message: 'Email verified. You can now log in.' }
+    await this.cache.del(emailVerifyTokenKey(token))
+    await this.cache.del(emailVerifyUserKey(userId))
   }
 
-  async login(dto: LoginDto) {
+  public async login(dto: LoginDto, res: Response): Promise<User> {
     const user = await this.prisma.user.findUnique({ where: { email: dto.email } })
     if (!user) throw new UnauthorizedException('Invalid credentials')
 
@@ -80,35 +125,58 @@ export class AuthService {
       throw new UnauthorizedException('Your account has been suspended')
 
     const token = this.jwt.sign({ sub: user.id, email: user.email, role: user.role })
-    return { token, user }
+    this.setAuthCookie(res, token)
+    return user
   }
 
-  async forgotPassword(dto: ForgotPasswordDto) {
+  public logout(res: Response): void {
+    res.clearCookie(AUTH_COOKIE_NAME)
+  }
+
+  /** Mint a JWT for the given user and write it to the auth cookie on `res`. */
+  public issueSessionCookie(res: Response, user: User): void {
+    const token = this.jwt.sign({ sub: user.id, email: user.email, role: user.role })
+    this.setAuthCookie(res, token)
+  }
+
+  private setAuthCookie(res: Response, token: string): void {
+    res.cookie(AUTH_COOKIE_NAME, token, {
+      httpOnly: true,
+      sameSite: 'lax',
+      secure: IS_PRODUCTION,
+      maxAge: AUTH_COOKIE_MAX_AGE_MS,
+    })
+  }
+
+  public async forgotPassword(dto: ForgotPasswordDto): Promise<OperationMessage> {
     const user = await this.prisma.user.findUnique({ where: { email: dto.email } })
-    // Always return the same message to prevent user enumeration
     if (!user) return { message: 'If that email exists, a reset link has been sent.' }
 
-    const token = randomBytes(32).toString('hex')
-    await this.redis.set(`pwd_reset:${token}`, user.id, PWD_RESET_TTL)
+    const token = randomBytes(TOKEN_BYTES).toString('hex')
+    await this.cache.set(passwordResetTokenKey(token), user.id, PASSWORD_RESET_TTL_SECONDS)
 
-    // TODO: send password reset email with token
+    // TODO: send password reset email via MailerService once a template exists
     console.log(`[DEV] Password reset link: /auth/reset-password?token=${token}`)
 
     return { message: 'If that email exists, a reset link has been sent.' }
   }
 
-  async resetPassword(dto: ResetPasswordDto) {
-    const userId = await this.redis.get(`pwd_reset:${dto.token}`)
+  public async resetPassword(dto: ResetPasswordDto): Promise<OperationMessage> {
+    const userId = await this.cache.get(passwordResetTokenKey(dto.token))
     if (!userId) throw new BadRequestException('Invalid or expired reset link')
 
     const passwordHash = await bcrypt.hash(dto.password, BCRYPT_ROUNDS)
     await this.prisma.user.update({ where: { id: userId }, data: { passwordHash } })
-    await this.redis.del(`pwd_reset:${dto.token}`)
+    await this.cache.del(passwordResetTokenKey(dto.token))
 
     return { message: 'Password updated successfully.' }
   }
 
-  async changePassword(userId: string, currentPassword: string, newPassword: string) {
+  public async changePassword(
+    userId: string,
+    currentPassword: string,
+    newPassword: string,
+  ): Promise<OperationMessage> {
     const user = await this.prisma.user.findUnique({ where: { id: userId } })
     if (!user) throw new NotFoundException()
 
@@ -119,5 +187,26 @@ export class AuthService {
     await this.prisma.user.update({ where: { id: userId }, data: { passwordHash } })
 
     return { message: 'Password changed successfully.' }
+  }
+
+  private async issueVerificationToken(user: User): Promise<void> {
+    const previous = await this.cache.get(emailVerifyUserKey(user.id))
+    if (previous) {
+      await this.cache.del(emailVerifyTokenKey(previous))
+    }
+
+    const token = randomBytes(TOKEN_BYTES).toString('hex')
+    await this.cache.set(emailVerifyTokenKey(token), user.id, EMAIL_VERIFY_TTL_SECONDS)
+    await this.cache.set(emailVerifyUserKey(user.id), token, EMAIL_VERIFY_TTL_SECONDS)
+
+    await this.mailer.sendMail({
+      to: user.email,
+      subject: 'Verify your email',
+      template: 'verify-email',
+      context: {
+        firstName: user.firstName,
+        link: `${APP_URL}/auth/verify-email?token=${token}`,
+      },
+    })
   }
 }

@@ -4,113 +4,115 @@ import {
   Get,
   HttpCode,
   HttpStatus,
-  Param,
   Post,
   Query,
   Render,
+  Req,
   Res,
   UseGuards,
 } from '@nestjs/common'
-import { ConfigService } from '@nestjs/config'
-import { Response } from 'express'
+import { User } from '@prisma/client'
+import { Request, Response } from 'express'
+import { OperationMessage } from '../common/types'
 import { AuthService } from './auth.service'
 import { CurrentUser } from './decorators/current-user.decorator'
 import { Public } from './decorators/public.decorator'
-import { Roles } from './decorators/roles.decorator'
 import { ForgotPasswordDto } from './dto/forgot-password.dto'
 import { LoginDto } from './dto/login.dto'
 import { RegisterDto } from './dto/register.dto'
+import { ResendVerificationDto } from './dto/resend-verification.dto'
 import { ResetPasswordDto } from './dto/reset-password.dto'
 import { JwtAuthGuard } from './guards/jwt-auth.guard'
-import { RolesGuard } from './guards/roles.guard'
-import { User } from '@prisma/client'
-
-const COOKIE_NAME = 'access_token'
 
 @Controller('auth')
 export class AuthController {
-  constructor(
-    private readonly authService: AuthService,
-    private readonly config: ConfigService,
-  ) {}
+  constructor(private readonly authService: AuthService) {}
 
   @Public()
   @Get('login')
   @Render('auth/login')
-  loginPage() {
-    return { title: 'Login' }
+  public loginPage(@Req() req: Request) {
+    return { title: 'Login', query: req.query }
   }
 
   @Public()
   @Get('register')
   @Render('auth/register')
-  registerPage() {
-    return { title: 'Register' }
+  public registerPage(@Req() req: Request) {
+    return { title: 'Register', query: req.query }
   }
 
   @Public()
   @Post('register')
-  @HttpCode(HttpStatus.CREATED)
-  register(@Body() dto: RegisterDto) {
-    return this.authService.register(dto)
+  public async register(@Body() dto: RegisterDto, @Res() res: Response) {
+    await this.authService.register(dto)
+    return res.redirect(`/auth/check-email?email=${encodeURIComponent(dto.email)}`)
+  }
+
+  @Public()
+  @Get('check-email')
+  @Render('auth/check-email')
+  public checkEmailPage(@Query('email') email: string) {
+    return { title: 'Check your email', email: email ?? '' }
+  }
+
+  @Public()
+  @Post('resend-verification')
+  @HttpCode(HttpStatus.OK)
+  public async resendVerification(
+    @Body() dto: ResendVerificationDto,
+  ): Promise<OperationMessage> {
+    await this.authService.resendVerification(dto)
+    return { message: 'If your email is registered and unverified, a new link has been sent.' }
   }
 
   @Public()
   @Get('verify-email')
-  async verifyEmail(@Query('token') token: string, @Res() res: Response) {
-    await this.authService.verifyEmail(token)
-    return res.redirect('/auth/login?verified=1')
+  public async verifyEmail(@Query('token') token: string, @Res() res: Response) {
+    try {
+      await this.authService.verifyEmail(token)
+      return res.render('auth/verified-success', { title: 'Email verified' })
+    } catch {
+      return res.render('auth/verified-failed', { title: 'Verification failed' })
+    }
   }
 
   @Public()
   @Post('login')
-  async login(@Body() dto: LoginDto, @Res() res: Response) {
-    const { token } = await this.authService.login(dto)
-    res.cookie(COOKIE_NAME, token, {
-      httpOnly: true,
-      sameSite: 'lax',
-      secure: this.config.get('NODE_ENV') === 'production',
-      maxAge: 7 * 24 * 60 * 60 * 1000,
-    })
+  public async login(@Body() dto: LoginDto, @Res() res: Response) {
+    await this.authService.login(dto, res)
     return res.redirect('/dashboard')
   }
 
   @Post('logout')
   @HttpCode(HttpStatus.OK)
-  logout(@Res({ passthrough: true }) res: Response) {
-    res.clearCookie(COOKIE_NAME)
+  public logout(@Res({ passthrough: true }) res: Response): OperationMessage {
+    this.authService.logout(res)
     return { message: 'Logged out' }
   }
 
   @Public()
   @Post('forgot-password')
   @HttpCode(HttpStatus.OK)
-  forgotPassword(@Body() dto: ForgotPasswordDto) {
+  public forgotPassword(@Body() dto: ForgotPasswordDto): Promise<OperationMessage> {
     return this.authService.forgotPassword(dto)
   }
 
   @Public()
   @Post('reset-password')
   @HttpCode(HttpStatus.OK)
-  resetPassword(@Body() dto: ResetPasswordDto) {
+  public resetPassword(@Body() dto: ResetPasswordDto): Promise<OperationMessage> {
     return this.authService.resetPassword(dto)
   }
 
   @UseGuards(JwtAuthGuard)
   @Post('change-password')
   @HttpCode(HttpStatus.OK)
-  changePassword(
+  public changePassword(
     @CurrentUser() user: User,
     @Body('currentPassword') current: string,
     @Body('newPassword') next: string,
-  ) {
+  ): Promise<OperationMessage> {
     return this.authService.changePassword(user.id, current, next)
-  }
-
-  @UseGuards(JwtAuthGuard, RolesGuard)
-  @Roles('ADMIN')
-  @Get('admin-test')
-  adminOnly(@CurrentUser() user: User) {
-    return { message: `Hello admin ${user.email}` }
   }
 }
