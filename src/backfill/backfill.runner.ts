@@ -103,7 +103,7 @@ export class BackfillRunner implements OnModuleDestroy {
       const page = job.lastPageFetched + 1
       let summaries: StravaSummaryActivity[]
       try {
-        summaries = await this.stravaApi.listActivities(accessToken, PER_PAGE, page, 'BACKFILL')
+        summaries = await this.fetchPageWithRetry(accessToken, page)
       } catch (err) {
         if (err instanceof StravaRateLimitedError) {
           await this.markRateLimited(job.id, err.retryAfterSeconds)
@@ -206,6 +206,27 @@ export class BackfillRunner implements OnModuleDestroy {
 
   private sleep(ms: number): Promise<void> {
     return new Promise((resolve) => setTimeout(resolve, ms))
+  }
+
+  /**
+   * Fetch one page, with a single retry after 5 s on transient (non-429) errors.
+   * 429s rethrow immediately so the runJob loop can transition to RATE_LIMITED
+   * without burning the retry.
+   */
+  private async fetchPageWithRetry(
+    accessToken: string,
+    page: number,
+  ): Promise<StravaSummaryActivity[]> {
+    try {
+      return await this.stravaApi.listActivities(accessToken, PER_PAGE, page, 'BACKFILL')
+    } catch (err) {
+      if (err instanceof StravaRateLimitedError) throw err
+      this.logger.warn(
+        `Backfill page ${page} transient error: ${(err as Error).message} — retrying in 5s`,
+      )
+      await this.sleep(5000)
+      return this.stravaApi.listActivities(accessToken, PER_PAGE, page, 'BACKFILL')
+    }
   }
 }
 

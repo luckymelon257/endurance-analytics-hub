@@ -1,14 +1,6 @@
 import Redis from 'ioredis'
 
-/**
- * Best-effort distributed lock. SET key value NX EX ttl. The owner is
- * identified by a unique token so we never release a lock we don't hold.
- *
- * heartbeat() re-extends the TTL while the runner is mid-loop.
- * release() only deletes the key if we still own it (accepting a tiny
- * GET+DEL race; consequence at worst is a dropped DEL which TTL handles
- * within ttlSec).
- */
+/** Token-owned distributed lock. heartbeat() and release() are atomic via Lua scripts. */
 export interface LockHandle {
   /** Re-extend TTL. Returns true if we still own the lock. */
   heartbeat(): Promise<boolean>
@@ -27,16 +19,25 @@ export async function acquireLock(
 
   return {
     async heartbeat(): Promise<boolean> {
-      const current = await redis.get(key)
-      if (current !== token) return false
-      await redis.expire(key, ttlSec)
-      return true
+      const script = `
+        if redis.call('get', KEYS[1]) == ARGV[1] then
+          return redis.call('expire', KEYS[1], ARGV[2])
+        else
+          return 0
+        end
+      `
+      const result = (await redis.eval(script, 1, key, token, String(ttlSec))) as number
+      return result === 1
     },
     async release(): Promise<void> {
-      const current = await redis.get(key)
-      if (current === token) {
-        await redis.del(key)
-      }
+      const script = `
+        if redis.call('get', KEYS[1]) == ARGV[1] then
+          return redis.call('del', KEYS[1])
+        else
+          return 0
+        end
+      `
+      await redis.eval(script, 1, key, token)
     },
   }
 }
