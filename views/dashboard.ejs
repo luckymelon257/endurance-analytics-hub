@@ -2,6 +2,8 @@
 <%- include('partials/navbar', { user }) %>
 
 <main class="mx-auto flex min-h-screen max-w-7xl flex-col px-4 py-8 sm:px-6 lg:px-8">
+  <%- include('partials/backfill-banner', { job: backfillJob }) %>
+
   <% if (stravaFlash === 'connected') { %>
     <div role="status" class="mb-6 rounded-xl bg-emerald-50 px-4 py-3 text-sm text-emerald-800 ring-1 ring-inset ring-emerald-600/20">
       Strava connected. Your recent activities are syncing in the background — refresh in a moment.

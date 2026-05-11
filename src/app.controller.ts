@@ -5,6 +5,7 @@ import { ActivitiesService } from './activities/activities.service'
 import { CurrentUser } from './auth/decorators/current-user.decorator'
 import { Public } from './auth/decorators/public.decorator'
 import { WebAuthGuard } from './auth/guards/web-auth.guard'
+import { BackfillCoordinator } from './backfill/backfill.coordinator'
 import { PrismaService } from './prisma/prisma.service'
 
 @Controller()
@@ -12,6 +13,7 @@ export class AppController {
   constructor(
     private readonly prisma: PrismaService,
     private readonly activitiesService: ActivitiesService,
+    private readonly backfill: BackfillCoordinator,
   ) {}
 
   @Public()
@@ -28,9 +30,10 @@ export class AppController {
     @CurrentUser() user: User,
     @Query('strava') stravaFlash?: 'connected' | 'new' | 'disconnected',
   ) {
-    const [stravaAccount, dashboard] = await Promise.all([
+    const [stravaAccount, dashboard, backfillJob] = await Promise.all([
       this.prisma.stravaAccount.findUnique({ where: { userId: user.id } }),
       this.activitiesService.getDashboardData(user.id),
+      this.backfill.getActiveJob(user.id),
     ])
 
     return {
@@ -42,6 +45,7 @@ export class AppController {
         ? `${stravaAccount.athleteFirstName ?? ''} ${stravaAccount.athleteLastName ?? ''}`.trim()
         : null,
       stravaFlash: stravaFlash ?? null,
+      backfillJob,
     }
   }
 

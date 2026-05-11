@@ -1,0 +1,110 @@
+<%
+  // Inputs: { job: BackfillJob | null }
+  const j = locals.job
+
+  function fmtCountdown(retryAfter) {
+    if (!retryAfter) return ''
+    const ms = new Date(retryAfter).getTime() - Date.now()
+    if (ms <= 0) return 'shortly'
+    const m = Math.floor(ms / 60000)
+    const s = Math.floor((ms % 60000) / 1000)
+    return m > 0 ? `${m}m ${s}s` : `${s}s`
+  }
+
+  const isActive  = j && ['QUEUED', 'RUNNING', 'RATE_LIMITED'].includes(j.status)
+  const pollAttrs = isActive
+    ? 'hx-get="/backfill/status" hx-trigger="every 5s" hx-swap="outerHTML" hx-target="this"'
+    : ''
+%>
+<div id="backfill-status" <%- pollAttrs %>>
+  <% if (!j) { %>
+    <div class="flex items-center justify-between gap-3 px-6 py-4">
+      <div>
+        <p class="text-sm font-semibold text-ink">Strava history</p>
+        <p class="text-xs text-ink-muted">Only your last year is imported by default.</p>
+      </div>
+      <form hx-post="/backfill/full" hx-target="#backfill-status" hx-swap="outerHTML">
+        <button type="submit" class="rounded-lg border border-border bg-card px-3 py-1.5 text-sm font-semibold text-ink-muted shadow-sm transition hover:bg-stone-50 hover:text-ink">
+          Load full history
+        </button>
+      </form>
+    </div>
+  <% } else if (j.mode === 'WINDOW_1Y' && j.status === 'COMPLETED') { %>
+    <div class="flex items-center justify-between gap-3 px-6 py-4">
+      <div>
+        <p class="text-sm font-semibold text-ink">Strava history</p>
+        <p class="text-xs text-ink-muted">Last 12 months imported (<%= j.imported %> activities).</p>
+      </div>
+      <form hx-post="/backfill/full" hx-target="#backfill-status" hx-swap="outerHTML">
+        <button type="submit" class="rounded-lg border border-border bg-card px-3 py-1.5 text-sm font-semibold text-ink-muted shadow-sm transition hover:bg-stone-50 hover:text-ink">
+          Load full history
+        </button>
+      </form>
+    </div>
+  <% } else if (j.status === 'QUEUED') { %>
+    <div class="flex items-center justify-between gap-3 px-6 py-4">
+      <div>
+        <p class="text-sm font-semibold text-ink">Strava history</p>
+        <p class="text-xs text-ink-muted">Queued. Waiting for an open slot…</p>
+      </div>
+      <form hx-post="/backfill/cancel" hx-target="#backfill-status" hx-swap="outerHTML">
+        <button type="submit" class="rounded-lg border border-border bg-card px-3 py-1.5 text-sm font-semibold text-ink-muted shadow-sm transition hover:bg-stone-50 hover:text-ink">
+          Cancel
+        </button>
+      </form>
+    </div>
+  <% } else if (j.status === 'RUNNING') { %>
+    <div class="flex items-center justify-between gap-3 px-6 py-4">
+      <div>
+        <p class="text-sm font-semibold text-ink">Importing your Strava history</p>
+        <p class="text-xs text-ink-muted"><%= j.imported %> activities so far…</p>
+      </div>
+      <form hx-post="/backfill/cancel" hx-target="#backfill-status" hx-swap="outerHTML">
+        <button type="submit" class="rounded-lg border border-border bg-card px-3 py-1.5 text-sm font-semibold text-ink-muted shadow-sm transition hover:bg-stone-50 hover:text-ink">
+          Cancel
+        </button>
+      </form>
+    </div>
+  <% } else if (j.status === 'RATE_LIMITED') { %>
+    <div class="px-6 py-4">
+      <p class="text-sm font-semibold text-ink">Importing your Strava history</p>
+      <p class="text-xs text-ink-muted">Paused — Strava rate limit reached. Resuming in <%= fmtCountdown(j.retryAfter) %>.</p>
+    </div>
+  <% } else if (j.mode === 'FULL' && j.status === 'COMPLETED') { %>
+    <div class="flex items-center justify-between gap-3 px-6 py-4">
+      <div>
+        <p class="text-sm font-semibold text-ink">Strava history</p>
+        <p class="text-xs text-ink-muted">Full history imported (<%= j.imported %> activities).</p>
+      </div>
+      <form hx-post="/backfill/retry" hx-target="#backfill-status" hx-swap="outerHTML">
+        <button type="submit" class="rounded-lg border border-border bg-card px-3 py-1.5 text-sm font-semibold text-ink-muted shadow-sm transition hover:bg-stone-50 hover:text-ink">
+          Re-import full history
+        </button>
+      </form>
+    </div>
+  <% } else if (j.status === 'FAILED') { %>
+    <div class="flex items-center justify-between gap-3 px-6 py-4">
+      <div>
+        <p class="text-sm font-semibold text-ink">Strava history</p>
+        <p class="text-xs text-rose-700">Full-history import failed: <%= j.error %></p>
+      </div>
+      <form hx-post="/backfill/retry" hx-target="#backfill-status" hx-swap="outerHTML">
+        <button type="submit" class="rounded-lg border border-border bg-card px-3 py-1.5 text-sm font-semibold text-ink-muted shadow-sm transition hover:bg-stone-50 hover:text-ink">
+          Retry
+        </button>
+      </form>
+    </div>
+  <% } else if (j.status === 'CANCELED') { %>
+    <div class="flex items-center justify-between gap-3 px-6 py-4">
+      <div>
+        <p class="text-sm font-semibold text-ink">Strava history</p>
+        <p class="text-xs text-ink-muted">Full-history import canceled.</p>
+      </div>
+      <form hx-post="/backfill/full" hx-target="#backfill-status" hx-swap="outerHTML">
+        <button type="submit" class="rounded-lg border border-border bg-card px-3 py-1.5 text-sm font-semibold text-ink-muted shadow-sm transition hover:bg-stone-50 hover:text-ink">
+          Load full history
+        </button>
+      </form>
+    </div>
+  <% } %>
+</div>

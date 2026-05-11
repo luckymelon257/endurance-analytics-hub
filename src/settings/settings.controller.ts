@@ -8,9 +8,10 @@ import {
   Res,
   UseGuards,
 } from '@nestjs/common'
-import { StravaAccount, User } from '@prisma/client'
+import { BackfillJob, StravaAccount, User } from '@prisma/client'
 import { Request, Response } from 'express'
 import { AuthService } from '../auth/auth.service'
+import { BackfillCoordinator } from '../backfill/backfill.coordinator'
 import { CurrentUser } from '../auth/decorators/current-user.decorator'
 import { Public } from '../auth/decorators/public.decorator'
 import { WebAuthGuard } from '../auth/guards/web-auth.guard'
@@ -38,6 +39,7 @@ interface SettingsContext {
     connectedAt: Date
     scope: string
   } | null
+  backfillJob: BackfillJob | null
 }
 
 @Public()
@@ -49,6 +51,7 @@ export class SettingsController {
     private readonly cache: CacheService,
     private readonly authService: AuthService,
     private readonly stravaService: StravaService,
+    private readonly backfill: BackfillCoordinator,
   ) {}
 
   @Get()
@@ -211,10 +214,11 @@ export class SettingsController {
   }
 
   private async buildContext(userId: string): Promise<SettingsContext> {
-    const [user, stravaAccount, pendingToken] = await Promise.all([
+    const [user, stravaAccount, pendingToken, backfillJob] = await Promise.all([
       this.prisma.user.findUniqueOrThrow({ where: { id: userId } }),
       this.prisma.stravaAccount.findUnique({ where: { userId } }),
       this.cache.get(emailChangeUserKey(userId)),
+      this.backfill.getStatus(userId),
     ])
 
     const pendingEmailChange = pendingToken
@@ -226,6 +230,7 @@ export class SettingsController {
       isPlaceholderEmail: isPlaceholderEmail(user.email),
       pendingEmailChange,
       strava: stravaAccount ? toStravaSummary(stravaAccount) : null,
+      backfillJob,
     }
   }
 }

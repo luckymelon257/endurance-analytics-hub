@@ -1,0 +1,37 @@
+<%
+  // Inputs: { job: BackfillJob | null }
+  const j = locals.job
+
+  function fmtCountdown(retryAfter) {
+    if (!retryAfter) return ''
+    const ms = new Date(retryAfter).getTime() - Date.now()
+    if (ms <= 0) return 'shortly'
+    const m = Math.floor(ms / 60000)
+    return m > 0 ? `${m}m` : 'under a minute'
+  }
+
+  const isActive  = j && ['QUEUED', 'RUNNING', 'RATE_LIMITED'].includes(j.status)
+  const pollAttrs = isActive
+    ? 'hx-get="/backfill/banner" hx-trigger="every 5s" hx-swap="outerHTML" hx-target="this"'
+    : ''
+%>
+<div id="backfill-banner" <%- pollAttrs %>>
+  <% if (!j) { %>
+    <%# no banner %>
+  <% } else if (j.status === 'QUEUED') { %>
+    <div class="mb-4 flex items-center gap-3 rounded-xl bg-brand-50 px-4 py-3 text-sm text-brand-800 ring-1 ring-inset ring-brand/20">
+      <span class="inline-block h-2 w-2 animate-pulse rounded-full bg-brand"></span>
+      Importing your Strava history — queued. Starting shortly…
+    </div>
+  <% } else if (j.status === 'RUNNING') { %>
+    <div class="mb-4 flex items-center gap-3 rounded-xl bg-brand-50 px-4 py-3 text-sm text-brand-800 ring-1 ring-inset ring-brand/20">
+      <span class="inline-block h-2 w-2 animate-pulse rounded-full bg-brand"></span>
+      Importing your Strava history — <%= j.imported %> imported…
+    </div>
+  <% } else if (j.status === 'RATE_LIMITED') { %>
+    <div class="mb-4 flex items-center gap-3 rounded-xl bg-amber-50 px-4 py-3 text-sm text-amber-900 ring-1 ring-inset ring-amber-600/20">
+      <span class="inline-block h-2 w-2 rounded-full bg-amber-500"></span>
+      Importing your Strava history — paused, resuming in <%= fmtCountdown(j.retryAfter) %>.
+    </div>
+  <% } %>
+</div>
