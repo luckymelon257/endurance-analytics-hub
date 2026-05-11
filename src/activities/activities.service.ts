@@ -14,7 +14,6 @@ import {
 } from './entities'
 import { StreamsService } from './streams.service'
 
-const HEATMAP_DAYS = 365
 const WEEKLY_VOLUME_WEEKS = 12
 const RECENT_TAKE = 20
 const PAGE_SIZE = 50
@@ -34,10 +33,13 @@ export class ActivitiesService {
    * Thin orchestrator that fans out to windowed methods. Each window
    * aggregates server-side in Postgres rather than pulling rows into JS.
    */
-  public async getDashboardData(userId: string): Promise<DashboardData> {
+  public async getDashboardData(
+    userId: string,
+    year = new Date().getFullYear(),
+  ): Promise<DashboardData> {
     const [stats, heatmap, weeklyVolume, recent] = await Promise.all([
       this.getDashboardStats(userId),
-      this.getHeatmapData(userId, HEATMAP_DAYS),
+      this.getHeatmapDataForYear(userId, year),
       this.getWeeklyVolume(userId, WEEKLY_VOLUME_WEEKS),
       this.getRecentActivities(userId, RECENT_TAKE),
     ])
@@ -45,28 +47,59 @@ export class ActivitiesService {
   }
 
   /**
-   * Per-day moving-time volume + session count for the last `days` days.
-   * SQL aggregation in Postgres — we don't pull rows into JS for this.
-   * Empty days are omitted from the result; the React island fills them.
+   * Per-day moving-time volume + session count for a calendar year.
+   * We aggregate in SQL, then zero-fill missing dates in code so the heatmap
+   * always spans Jan 1 to Dec 31 (or Jan 1 to today for the current year).
    */
-  public async getHeatmapData(userId: string, days = HEATMAP_DAYS): Promise<HeatmapDay[]> {
+  public async getHeatmapDataForYear(userId: string, year: number): Promise<HeatmapDay[]> {
+    const safeYear = Number.isFinite(year) ? Math.trunc(year) : new Date().getFullYear()
+    const yearStart = new Date(Date.UTC(safeYear, 0, 1, 0, 0, 0, 0))
+    const nextYearStart = new Date(Date.UTC(safeYear + 1, 0, 1, 0, 0, 0, 0))
+    const now = new Date()
+    const todayUtc = new Date(
+      Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate(), 0, 0, 0, 0),
+    )
+    const windowEnd = safeYear === todayUtc.getUTCFullYear()
+      ? todayUtc
+      : new Date(Date.UTC(safeYear, 11, 31, 0, 0, 0, 0))
+
+    if (windowEnd < yearStart) {
+      return []
+    }
+
     type Row = { day: string; volume_seconds: number; sessions: number }
     const rows = await this.prisma.$queryRaw<Row[]>`
       SELECT
         to_char(date_trunc('day', "startedAt"), 'YYYY-MM-DD') AS day,
-        COALESCE(SUM("durationSeconds"), 0)::int              AS volume_seconds,
-        COUNT(*)::int                                          AS sessions
+        COALESCE(SUM("durationSeconds"), 0)::int AS volume_seconds,
+        COUNT(*)::int AS sessions
       FROM activities
       WHERE "userId" = ${userId}
-        AND "startedAt" >= NOW() - (${days} || ' days')::interval
+        AND "startedAt" >= ${yearStart}
+        AND "startedAt" < ${nextYearStart}
       GROUP BY day
       ORDER BY day
     `
-    return rows.map((r) => ({
-      date: r.day,
-      volumeSeconds: r.volume_seconds,
-      sessions: r.sessions,
-    }))
+
+    const byDay = new Map(
+      rows.map((r) => [
+        r.day,
+        { volumeSeconds: r.volume_seconds, sessions: r.sessions },
+      ]),
+    )
+
+    const result: HeatmapDay[] = []
+    for (let d = new Date(yearStart); d <= windowEnd; d.setUTCDate(d.getUTCDate() + 1)) {
+      const key = formatDateKeyUtc(d)
+      const day = byDay.get(key)
+      result.push({
+        date: key,
+        volumeSeconds: day?.volumeSeconds ?? 0,
+        sessions: day?.sessions ?? 0,
+      })
+    }
+
+    return result
   }
 
   /**
@@ -372,5 +405,13 @@ function formatDateKey(d: Date): string {
   const y = d.getFullYear()
   const m = String(d.getMonth() + 1).padStart(2, '0')
   const day = String(d.getDate()).padStart(2, '0')
+  return `${y}-${m}-${day}`
+}
+
+/** Format a Date as YYYY-MM-DD in UTC. */
+function formatDateKeyUtc(d: Date): string {
+  const y = d.getUTCFullYear()
+  const m = String(d.getUTCMonth() + 1).padStart(2, '0')
+  const day = String(d.getUTCDate()).padStart(2, '0')
   return `${y}-${m}-${day}`
 }

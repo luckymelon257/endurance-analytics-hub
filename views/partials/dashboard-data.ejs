@@ -1,6 +1,7 @@
 <%
   const stats = dashboard.stats
   const recent = dashboard.recent
+  const currentYear = new Date().getFullYear()
 
   const sportIcons = {
     RUNNING: '🏃', CYCLING: '🚴', SWIMMING: '🏊', ROWING: '🚣', OTHER: '⚡',
@@ -33,6 +34,7 @@
   const totalKm = stats.totalDistanceMeters > 0
     ? (stats.totalDistanceMeters / 1000).toFixed(1) + ' km'
     : '—'
+  const recentPreview = recent.slice(0, 4)
   const tiles = [
     { label: 'Total activities', value: stats.totalActivities.toString(), icon: '🏃' },
     { label: 'This week',        value: stats.thisWeekCount.toString(),   icon: '📅' },
@@ -62,7 +64,13 @@
   >
     <header class="mb-4 flex items-baseline justify-between">
       <h2 id="heatmap-heading" class="text-sm font-semibold text-ink">Training consistency</h2>
-      <p class="text-xs text-ink-muted">Last 12 months</p>
+      <div class="flex items-center gap-2 text-xs">
+        <a href="/dashboard?year=<%= heatmapYear - 1 %>" class="text-brand hover:text-brand-700">← <%= heatmapYear - 1 %></a>
+        <span class="rounded-full bg-stone-100 px-2 py-0.5 font-medium text-ink-muted ring-1 ring-inset ring-border">Year <%= heatmapYear %></span>
+        <% if (heatmapYear < currentYear) { %>
+          <a href="/dashboard?year=<%= heatmapYear + 1 %>" class="text-brand hover:text-brand-700"><%= heatmapYear + 1 %> →</a>
+        <% } %>
+      </div>
     </header>
     <div
       data-island="training-heatmap"
@@ -77,22 +85,22 @@
     class="overflow-hidden rounded-2xl bg-card shadow-sm ring-1 ring-border"
   >
     <header class="flex items-baseline justify-between border-b border-border px-5 py-3">
-      <h2 id="recent-heading" class="text-sm font-semibold text-ink">Latest 20</h2>
+      <h2 id="recent-heading" class="text-sm font-semibold text-ink">Latest 4</h2>
       <a href="/activities" class="text-xs font-medium text-brand hover:text-brand-700">View all →</a>
     </header>
 
-    <% if (recent.length === 0) { %>
+    <% if (recentPreview.length === 0) { %>
       <p class="px-5 py-8 text-center text-sm text-ink-muted">
         No activities yet.
         <% if (stravaConnected) { %>
           <br />Click <strong>Sync from Strava</strong> to import.
         <% } else { %>
-          <br /><a href="/auth/strava/connect" class="text-brand hover:text-brand-700">Connect Strava</a> to start.
+          <br /><a href="/auth/strava/connect" hx-boost="false" class="text-brand hover:text-brand-700">Connect Strava</a> to start.
         <% } %>
       </p>
     <% } else { %>
       <ul class="divide-y divide-border">
-        <% recent.forEach((a) => { %>
+        <% recentPreview.forEach((a) => { %>
           <li>
             <a
               href="/activities/<%= a.id %>"

@@ -74,7 +74,7 @@
             Disconnect
           </button>
         <% } else { %>
-          <a href="/auth/strava/connect" class="rounded-lg bg-brand px-3 py-1.5 text-sm font-semibold text-white shadow-sm transition hover:bg-brand-700">
+          <a href="/auth/strava/connect" hx-boost="false" class="rounded-lg bg-brand px-3 py-1.5 text-sm font-semibold text-white shadow-sm transition hover:bg-brand-700">
             Link Strava
           </a>
         <% } %>
@@ -89,11 +89,11 @@
   -->
   <div
     id="dashboard-data"
-    hx-get="/partials/dashboard/data"
+    hx-get="/partials/dashboard/data?year=<%= encodeURIComponent(String(heatmapYear)) %>"
     hx-trigger="syncCompleted from:body"
     hx-swap="innerHTML"
   >
-    <%- include('partials/dashboard-data', { dashboard, stravaConnected }) %>
+    <%- include('partials/dashboard-data', { dashboard, heatmapYear, stravaConnected }) %>
   </div>
 </main>
 

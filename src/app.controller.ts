@@ -28,11 +28,13 @@ export class AppController {
   @Render('dashboard')
   public async dashboard(
     @CurrentUser() user: User,
+    @Query('year') yearRaw?: string,
     @Query('strava') stravaFlash?: 'connected' | 'new' | 'disconnected',
   ) {
+    const heatmapYear = this.parseDashboardYear(yearRaw)
     const [stravaAccount, dashboard, backfillJob] = await Promise.all([
       this.prisma.stravaAccount.findUnique({ where: { userId: user.id } }),
-      this.activitiesService.getDashboardData(user.id),
+      this.activitiesService.getDashboardData(user.id, heatmapYear),
       this.backfill.getActiveJob(user.id),
     ])
 
@@ -40,6 +42,7 @@ export class AppController {
       title: 'Dashboard',
       user,
       dashboard,
+      heatmapYear,
       stravaConnected: stravaAccount !== null,
       stravaAthleteName: stravaAccount
         ? `${stravaAccount.athleteFirstName ?? ''} ${stravaAccount.athleteLastName ?? ''}`.trim()
@@ -57,11 +60,21 @@ export class AppController {
   @UseGuards(WebAuthGuard)
   @Get('partials/dashboard/data')
   @Render('partials/dashboard-data')
-  public async dashboardData(@CurrentUser() user: User) {
+  public async dashboardData(@CurrentUser() user: User, @Query('year') yearRaw?: string) {
+    const heatmapYear = this.parseDashboardYear(yearRaw)
     const [stravaAccount, dashboard] = await Promise.all([
       this.prisma.stravaAccount.findUnique({ where: { userId: user.id } }),
-      this.activitiesService.getDashboardData(user.id),
+      this.activitiesService.getDashboardData(user.id, heatmapYear),
     ])
-    return { dashboard, stravaConnected: stravaAccount !== null }
+    return { dashboard, heatmapYear, stravaConnected: stravaAccount !== null }
+  }
+
+  private parseDashboardYear(yearRaw?: string): number {
+    if (!yearRaw) return new Date().getFullYear()
+    const year = Number(yearRaw)
+    if (!Number.isInteger(year) || year < 2000 || year > 2100) {
+      return new Date().getFullYear()
+    }
+    return year
   }
 }
