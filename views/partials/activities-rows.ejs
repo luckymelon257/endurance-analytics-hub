@@ -1,0 +1,59 @@
+<%
+  // Inputs: { activities: ActivitySummary[], nextCursor: string | null }
+  // Renders ONLY <tr> rows + a "Load more" trigger row. Used by HTMX appends.
+
+  const sportIcons = {
+    RUNNING: '🏃', CYCLING: '🚴', SWIMMING: '🏊', ROWING: '🚣', OTHER: '⚡',
+  }
+
+  function fmtDistance(m) {
+    if (m === null || m <= 0) return '—'
+    const km = m / 1000
+    const decimals = km >= 100 ? 0 : km >= 10 ? 1 : 2
+    return km.toFixed(decimals) + ' km'
+  }
+
+  function fmtDuration(s) {
+    if (s === null || s <= 0) return '—'
+    const h = Math.floor(s / 3600)
+    const m = Math.floor((s % 3600) / 60)
+    const sec = Math.floor(s % 60)
+    const pad = (n) => n.toString().padStart(2, '0')
+    return h > 0 ? `${h}:${pad(m)}:${pad(sec)}` : `${m}:${pad(sec)}`
+  }
+
+  function fmtDate(iso) {
+    if (!iso) return '—'
+    const d = new Date(iso)
+    return d.toLocaleString(undefined, {
+      weekday: 'short', month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit',
+    })
+  }
+%>
+<% activities.forEach((a) => { %>
+  <tr class="border-b border-border last:border-b-0 hover:bg-stone-50/60">
+    <td class="px-5 py-3 text-xl" aria-hidden="true"><%= sportIcons[a.sportType] %></td>
+    <td class="px-5 py-3">
+      <a href="/activities/<%= a.id %>" class="text-sm font-medium text-ink hover:text-brand"><%= a.title %></a>
+      <p class="text-xs text-ink-muted"><%= fmtDate(a.startedAt) %></p>
+    </td>
+    <td class="px-5 py-3 text-right text-sm font-semibold tabular-nums text-ink"><%= fmtDistance(a.distanceMeters) %></td>
+    <td class="px-5 py-3 text-right text-xs tabular-nums text-ink-muted"><%= fmtDuration(a.durationSeconds) %></td>
+  </tr>
+<% }) %>
+<% if (nextCursor) { %>
+  <tr id="load-more-row">
+    <td colspan="4" class="px-5 py-4 text-center">
+      <button
+        type="button"
+        hx-get="/activities/partials/rows?cursor=<%= encodeURIComponent(nextCursor) %>"
+        hx-target="#load-more-row"
+        hx-swap="outerHTML"
+        hx-push-url="/activities?cursor=<%= encodeURIComponent(nextCursor) %>"
+        class="rounded-lg border border-border bg-card px-4 py-2 text-sm font-semibold text-ink-muted shadow-sm transition hover:bg-stone-50 hover:text-ink"
+      >
+        Load more
+      </button>
+    </td>
+  </tr>
+<% } %>

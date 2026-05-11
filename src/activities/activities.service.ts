@@ -14,15 +14,10 @@ import {
 } from './entities'
 import { StreamsService } from './streams.service'
 
-const HEATMAP_DAYS = 16 * 7 // 16 weeks
+const HEATMAP_DAYS = 365
 const WEEKLY_VOLUME_WEEKS = 12
-
-interface AggregationRow {
-  startedAt: Date | null
-  durationSeconds: number | null
-  distanceMeters: number | null
-  sportType: ActivitySportType
-}
+const RECENT_TAKE = 20
+const PAGE_SIZE = 50
 
 @Injectable()
 export class ActivitiesService {
@@ -36,53 +31,128 @@ export class ActivitiesService {
   ) {}
 
   /**
-   * Single-shot aggregator for the dashboard. Pulls the last 16 weeks of
-   * activities once and derives stats, the heatmap grid, the weekly-volume
-   * bars, and the recent-activity preview from the same in-memory rows.
+   * Thin orchestrator that fans out to windowed methods. Each window
+   * aggregates server-side in Postgres rather than pulling rows into JS.
    */
   public async getDashboardData(userId: string): Promise<DashboardData> {
-    const cutoff = startOfDay(daysAgo(HEATMAP_DAYS))
-
-    const [stats, rows] = await Promise.all([
+    const [stats, heatmap, weeklyVolume, recent] = await Promise.all([
       this.getDashboardStats(userId),
-      this.prisma.activity.findMany({
-        where: { userId, startedAt: { gte: cutoff } },
-        orderBy: { startedAt: 'desc' },
-        select: {
-          id: true,
-          title: true,
-          sportType: true,
-          startedAt: true,
-          durationSeconds: true,
-          distanceMeters: true,
-          avgHeartRate: true,
-          avgPaceSecondsPerKm: true,
-        },
-      }),
+      this.getHeatmapData(userId, HEATMAP_DAYS),
+      this.getWeeklyVolume(userId, WEEKLY_VOLUME_WEEKS),
+      this.getRecentActivities(userId, RECENT_TAKE),
     ])
+    return { stats, recent, heatmap, weeklyVolume }
+  }
 
-    const aggRows: AggregationRow[] = rows.map((r) => ({
-      startedAt: r.startedAt,
+  /**
+   * Per-day moving-time volume + session count for the last `days` days.
+   * SQL aggregation in Postgres — we don't pull rows into JS for this.
+   * Empty days are omitted from the result; the React island fills them.
+   */
+  public async getHeatmapData(userId: string, days = HEATMAP_DAYS): Promise<HeatmapDay[]> {
+    type Row = { day: string; volume_seconds: number; sessions: number }
+    const rows = await this.prisma.$queryRaw<Row[]>`
+      SELECT
+        to_char(date_trunc('day', "startedAt"), 'YYYY-MM-DD') AS day,
+        COALESCE(SUM("durationSeconds"), 0)::int              AS volume_seconds,
+        COUNT(*)::int                                          AS sessions
+      FROM activities
+      WHERE "userId" = ${userId}
+        AND "startedAt" >= NOW() - (${days} || ' days')::interval
+      GROUP BY day
+      ORDER BY day
+    `
+    return rows.map((r) => ({
+      date: r.day,
+      volumeSeconds: r.volume_seconds,
+      sessions: r.sessions,
+    }))
+  }
+
+  /**
+   * Per-(week, sport) duration + distance for the last `weeks` ISO weeks.
+   * Pre-fills empty weeks and zero-init bySport so the chart code is unchanged.
+   */
+  public async getWeeklyVolume(
+    userId: string,
+    weeks = WEEKLY_VOLUME_WEEKS,
+  ): Promise<WeeklyVolumeBin[]> {
+    type Row = {
+      week_start: string
+      sport_type: ActivitySportType
+      total_seconds: number
+      total_meters: number
+    }
+    const rows = await this.prisma.$queryRaw<Row[]>`
+      SELECT
+        to_char(date_trunc('week', "startedAt"), 'YYYY-MM-DD') AS week_start,
+        "sportType"::text                                       AS sport_type,
+        COALESCE(SUM("durationSeconds"), 0)::int                AS total_seconds,
+        COALESCE(SUM("distanceMeters"), 0)::float               AS total_meters
+      FROM activities
+      WHERE "userId" = ${userId}
+        AND "startedAt" >= date_trunc('week', NOW()) - (${weeks - 1} || ' weeks')::interval
+      GROUP BY week_start, "sportType"
+      ORDER BY week_start
+    `
+
+    const bins = new Map<string, WeeklyVolumeBin>()
+    const thisWeekStart = startOfIsoWeek(new Date())
+    for (let i = weeks - 1; i >= 0; i--) {
+      const start = new Date(thisWeekStart)
+      start.setDate(start.getDate() - i * 7)
+      const key = formatDateKey(start)
+      bins.set(key, {
+        weekStart: key,
+        totalSeconds: 0,
+        totalMeters: 0,
+        bySport: { RUNNING: 0, CYCLING: 0, SWIMMING: 0, ROWING: 0, OTHER: 0 },
+      })
+    }
+
+    for (const row of rows) {
+      const bin = bins.get(row.week_start)
+      if (!bin) continue
+      bin.totalSeconds += row.total_seconds
+      bin.totalMeters += row.total_meters
+      bin.bySport[row.sport_type] += row.total_seconds
+    }
+
+    return Array.from(bins.values())
+  }
+
+  /**
+   * Latest N activities for the dashboard "recent" card.
+   */
+  public async getRecentActivities(
+    userId: string,
+    take = RECENT_TAKE,
+  ): Promise<ActivitySummary[]> {
+    const rows = await this.prisma.activity.findMany({
+      where: { userId },
+      orderBy: [{ startedAt: 'desc' }, { id: 'desc' }],
+      take,
+      select: {
+        id: true,
+        title: true,
+        sportType: true,
+        startedAt: true,
+        durationSeconds: true,
+        distanceMeters: true,
+        avgHeartRate: true,
+        avgPaceSecondsPerKm: true,
+      },
+    })
+    return rows.map((r) => ({
+      id: r.id,
+      title: r.title,
+      sportType: r.sportType as ActivitySportType,
+      startedAt: r.startedAt ? r.startedAt.toISOString() : null,
       durationSeconds: r.durationSeconds,
       distanceMeters: r.distanceMeters,
-      sportType: r.sportType as ActivitySportType,
+      avgHeartRate: r.avgHeartRate,
+      avgPaceSecondsPerKm: r.avgPaceSecondsPerKm,
     }))
-
-    return {
-      stats,
-      recent: rows.slice(0, 5).map((r) => ({
-        id: r.id,
-        title: r.title,
-        sportType: r.sportType as ActivitySportType,
-        startedAt: r.startedAt ? r.startedAt.toISOString() : null,
-        durationSeconds: r.durationSeconds,
-        distanceMeters: r.distanceMeters,
-        avgHeartRate: r.avgHeartRate,
-        avgPaceSecondsPerKm: r.avgPaceSecondsPerKm,
-      })),
-      heatmap: buildHeatmap(aggRows, HEATMAP_DAYS),
-      weeklyVolume: buildWeeklyVolume(aggRows, WEEKLY_VOLUME_WEEKS),
-    }
   }
 
   public async getDashboardStats(userId: string): Promise<DashboardStats> {
@@ -218,6 +288,102 @@ export class ActivitiesService {
       avgPaceSecondsPerKm: r.avgPaceSecondsPerKm,
     }))
   }
+
+  /**
+   * Cursor-paginated list of activities. Cursor encodes (startedAt, id) of the
+   * last item on the previous page. We use row-tuple comparison so ordering
+   * stays correct even when many activities share the same startedAt (rare,
+   * but happens for brick workouts).
+   */
+  public async listForUserPaged(
+    userId: string,
+    cursor: string | undefined,
+    take = PAGE_SIZE,
+  ): Promise<PageOfActivities> {
+    const decoded = decodeCursor(cursor)
+
+    // Pull +1 to detect whether more pages exist without a separate COUNT.
+    const rows = await this.prisma.activity.findMany({
+      where: {
+        userId,
+        ...(decoded
+          ? {
+              OR: [
+                { startedAt: { lt: decoded.startedAt } },
+                {
+                  startedAt: decoded.startedAt,
+                  id: { lt: decoded.id },
+                },
+              ],
+            }
+          : {}),
+      },
+      orderBy: [{ startedAt: 'desc' }, { id: 'desc' }],
+      take: take + 1,
+      select: {
+        id: true,
+        title: true,
+        sportType: true,
+        startedAt: true,
+        durationSeconds: true,
+        distanceMeters: true,
+        avgHeartRate: true,
+        avgPaceSecondsPerKm: true,
+      },
+    })
+
+    const hasMore = rows.length > take
+    const sliced = hasMore ? rows.slice(0, take) : rows
+    const items = sliced.map((r) => ({
+      id: r.id,
+      title: r.title,
+      sportType: r.sportType as ActivitySportType,
+      startedAt: r.startedAt ? r.startedAt.toISOString() : null,
+      durationSeconds: r.durationSeconds,
+      distanceMeters: r.distanceMeters,
+      avgHeartRate: r.avgHeartRate,
+      avgPaceSecondsPerKm: r.avgPaceSecondsPerKm,
+    }))
+
+    let nextCursor: string | null = null
+    if (hasMore) {
+      const last = sliced[sliced.length - 1]
+      if (last.startedAt) {
+        nextCursor = encodeCursor({ startedAt: last.startedAt, id: last.id })
+      }
+    }
+
+    return { items, nextCursor }
+  }
+}
+
+export interface PageOfActivities {
+  items: ActivitySummary[]
+  nextCursor: string | null
+}
+
+interface DecodedCursor {
+  startedAt: Date
+  id: string
+}
+
+function encodeCursor(c: DecodedCursor): string {
+  const payload = `${c.startedAt.toISOString()}|${c.id}`
+  return Buffer.from(payload, 'utf8').toString('base64url')
+}
+
+function decodeCursor(raw: string | undefined): DecodedCursor | null {
+  if (!raw) return null
+  try {
+    const payload = Buffer.from(raw, 'base64url').toString('utf8')
+    const [iso, id] = payload.split('|')
+    if (!iso || !id) return null
+    const startedAt = new Date(iso)
+    if (Number.isNaN(startedAt.getTime())) return null
+    return { startedAt, id }
+  } catch {
+    return null
+  }
 }
 
 /** Monday 00:00 of the week containing `now`. Endurance training convention. */
@@ -230,82 +396,10 @@ function startOfIsoWeek(now: Date): Date {
   return d
 }
 
-/** Today's 00:00 in server local time. */
-function startOfDay(d: Date): Date {
-  const c = new Date(d)
-  c.setHours(0, 0, 0, 0)
-  return c
-}
-
-function daysAgo(n: number): Date {
-  const d = new Date()
-  d.setDate(d.getDate() - n)
-  return d
-}
-
 /** Format a Date as YYYY-MM-DD in local time. */
 function formatDateKey(d: Date): string {
   const y = d.getFullYear()
   const m = String(d.getMonth() + 1).padStart(2, '0')
   const day = String(d.getDate()).padStart(2, '0')
   return `${y}-${m}-${day}`
-}
-
-/**
- * Build a contiguous `numDays`-long array ending today. Days with no training
- * are present with zero values so the React grid renders empty cells uniformly.
- */
-function buildHeatmap(rows: AggregationRow[], numDays: number): HeatmapDay[] {
-  const buckets = new Map<string, { volumeSeconds: number; sessions: number }>()
-  for (const row of rows) {
-    if (!row.startedAt || !row.durationSeconds) continue
-    const key = formatDateKey(row.startedAt)
-    const bucket = buckets.get(key) ?? { volumeSeconds: 0, sessions: 0 }
-    bucket.volumeSeconds += row.durationSeconds
-    bucket.sessions += 1
-    buckets.set(key, bucket)
-  }
-
-  const out: HeatmapDay[] = []
-  for (let i = numDays - 1; i >= 0; i--) {
-    const d = startOfDay(daysAgo(i))
-    const key = formatDateKey(d)
-    const bucket = buckets.get(key) ?? { volumeSeconds: 0, sessions: 0 }
-    out.push({ date: key, volumeSeconds: bucket.volumeSeconds, sessions: bucket.sessions })
-  }
-  return out
-}
-
-/**
- * Aggregate moving time and distance per ISO week, broken down by sport. Returns
- * `numWeeks` bins ending with the current week (chronological order, oldest first).
- */
-function buildWeeklyVolume(rows: AggregationRow[], numWeeks: number): WeeklyVolumeBin[] {
-  const buckets = new Map<string, WeeklyVolumeBin>()
-
-  // Pre-create empty bins so weeks with zero training render correctly.
-  const thisWeekStart = startOfIsoWeek(new Date())
-  for (let i = numWeeks - 1; i >= 0; i--) {
-    const start = new Date(thisWeekStart)
-    start.setDate(start.getDate() - i * 7)
-    buckets.set(formatDateKey(start), {
-      weekStart: formatDateKey(start),
-      totalSeconds: 0,
-      totalMeters: 0,
-      bySport: { RUNNING: 0, CYCLING: 0, SWIMMING: 0, ROWING: 0, OTHER: 0 },
-    })
-  }
-
-  for (const row of rows) {
-    if (!row.startedAt) continue
-    const weekKey = formatDateKey(startOfIsoWeek(row.startedAt))
-    const bin = buckets.get(weekKey)
-    if (!bin) continue // older than the window we're showing
-    const seconds = row.durationSeconds ?? 0
-    bin.totalSeconds += seconds
-    bin.totalMeters += row.distanceMeters ?? 0
-    bin.bySport[row.sportType] += seconds
-  }
-
-  return Array.from(buckets.values())
 }

@@ -8,8 +8,10 @@
       <p class="mt-1 text-sm text-ink-muted">
         <% if (activities.length === 0) { %>
           Nothing imported yet — connect Strava and click Sync.
+        <% } else if (isFirstPage) { %>
+          Showing your most recent activities.
         <% } else { %>
-          Showing the latest <%= activities.length %> imported.
+          Showing older activities.
         <% } %>
       </p>
     </div>
@@ -33,8 +35,12 @@
     hx-trigger="syncCompleted from:body"
     hx-swap="innerHTML"
   >
-    <%- include('partials/activities-list-island', { activities }) %>
+    <%- include('partials/activities-list-island', { activities, nextCursor }) %>
   </div>
+
+  <% if (!isFirstPage) { %>
+    <a href="/activities" class="mt-6 self-center text-sm text-brand hover:text-brand-700">← Back to latest</a>
+  <% } %>
 </main>
 
 <%- include('partials/footer') %>
