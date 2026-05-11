@@ -10,6 +10,7 @@ import { JwtAuthGuard } from './auth/guards/jwt-auth.guard'
 import { BackfillModule } from './backfill/backfill.module'
 import { CacheModule } from './cache/cache.module'
 import { PrismaModule } from './prisma/prisma.module'
+import { ReportsModule } from './reports/reports.module'
 import { SettingsModule } from './settings/settings.module'
 import { StravaModule } from './strava/strava.module'
 import { ViteAssetsModule } from './vite-assets/vite-assets.module'
@@ -25,6 +26,7 @@ import { ViteAssetsModule } from './vite-assets/vite-assets.module'
     StravaModule,
     BackfillModule,
     SettingsModule,
+    ReportsModule,
     ViteAssetsModule,
   ],
   controllers: [AppController],

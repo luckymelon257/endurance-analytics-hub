@@ -95,6 +95,85 @@
   >
     <%- include('partials/dashboard-data', { dashboard, heatmapYear, stravaConnected }) %>
   </div>
+
+  <!-- Data & Reports -->
+  <section
+    aria-labelledby="reports-heading"
+    class="mt-8 overflow-hidden rounded-2xl bg-card shadow-sm ring-1 ring-border"
+  >
+    <div class="border-b border-border px-6 py-4">
+      <h2 id="reports-heading" class="text-lg font-semibold text-ink">Data & Reports</h2>
+      <p class="mt-1 text-sm text-ink-muted">Download your activities or import from a file</p>
+    </div>
+
+    <div class="px-6 py-6">
+      <!-- Export Section -->
+      <div class="mb-8">
+        <h3 class="mb-4 text-sm font-semibold text-ink">Export Monthly Report</h3>
+        <div class="flex flex-wrap gap-3">
+          <a
+            href="/reports/export/excel"
+            hx-boost="false"
+            download
+            class="inline-flex items-center gap-2 rounded-lg bg-emerald-600 px-4 py-2 text-sm font-semibold text-white shadow-sm transition hover:bg-emerald-700"
+          >
+            <svg class="h-4 w-4" fill="currentColor" viewBox="0 0 24 24">
+              <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-2 15l-5-5 1.41-1.41L10 14.17l7.59-7.59L19 8l-9 9z" />
+            </svg>
+            Download Excel
+          </a>
+          <a
+            href="/reports/export/word"
+            hx-boost="false"
+            download
+            class="inline-flex items-center gap-2 rounded-lg bg-blue-600 px-4 py-2 text-sm font-semibold text-white shadow-sm transition hover:bg-blue-700"
+          >
+            <svg class="h-4 w-4" fill="currentColor" viewBox="0 0 24 24">
+              <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-2 15l-5-5 1.41-1.41L10 14.17l7.59-7.59L19 8l-9 9z" />
+            </svg>
+            Download Word Report
+          </a>
+        </div>
+        <p class="mt-2 text-xs text-ink-muted">Generates a report of all your activities from the current month.</p>
+      </div>
+
+      <!-- Import Section -->
+      <div class="border-t border-border pt-6">
+        <h3 class="mb-4 text-sm font-semibold text-ink">Import Activities</h3>
+        <form
+          method="POST"
+          action="/reports/import"
+          enctype="multipart/form-data"
+          hx-boost="false"
+        >
+          <div class="mb-4 flex flex-col gap-3 sm:flex-row sm:items-end">
+            <div class="flex-1">
+              <label for="import-file" class="block text-xs font-medium text-ink-muted mb-1.5">
+                Select Excel file (.xlsx)
+              </label>
+              <input
+                id="import-file"
+                type="file"
+                name="file"
+                accept=".xlsx"
+                required
+                 class="block w-full rounded-lg border border-border bg-white px-3 py-2 text-sm text-ink placeholder-ink-muted shadow-sm transition cursor-pointer focus:border-brand focus:outline-none focus:ring-1 focus:ring-brand file:rounded-md file:border-0 file:bg-brand file:text-white file:font-semibold file:cursor-pointer file:hover:bg-brand-700 file:mr-3 file:px-3 file:py-1 file:transition"
+              />
+            </div>
+            <button
+              type="submit"
+              class="rounded-lg bg-brand px-6 py-2 text-sm font-semibold text-white shadow-sm transition hover:bg-brand-700 focus:outline-none focus:ring-2 focus:ring-brand focus:ring-offset-2 disabled:opacity-60"
+            >
+              Import
+            </button>
+          </div>
+          <p class="text-xs text-ink-muted">
+            Upload an Excel (.xlsx) file with columns: Title, Sport Type, Date, Duration (min), Distance (km)
+          </p>
+        </form>
+      </div>
+    </div>
+  </section>
 </main>
 
 <%- include('partials/footer') %>
