@@ -16,3 +16,13 @@ export const emailChangeUserKey = (userId: string) => `email_change:user:${userI
 export const rateLimitVerifyKey = (email: string) => `rl:verify:${email.toLowerCase()}`
 
 export const stravaStateKey = (state: string) => `strava_state:${state}`
+
+/** App-wide Strava rate-limit usage observed from response headers. */
+export const stravaBudgetUsage15MinKey = () => 'strava:usage:15min'
+export const stravaBudgetUsageDailyKey = () => 'strava:usage:daily'
+
+/** App-wide counter of Strava requests we've issued but not yet received responses for. */
+export const stravaInFlightKey = () => 'strava:in_flight'
+
+/** App-wide lock guaranteeing at most one backfill runner active at a time. */
+export const stravaBackfillLockKey = () => 'strava:backfill:lock'

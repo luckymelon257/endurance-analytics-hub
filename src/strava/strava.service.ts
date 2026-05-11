@@ -5,10 +5,12 @@ import {
   Logger,
   UnauthorizedException,
 } from '@nestjs/common'
+import { EventEmitter2 } from '@nestjs/event-emitter'
 import { ActivityStatus, SportType, UserStatus } from '@prisma/client'
 import * as bcrypt from 'bcrypt'
 import { randomBytes } from 'crypto'
 import { CacheService } from '../cache/cache.service'
+import { StravaConnectedEvent } from './events/strava-connected.event'
 import { STRAVA_CLIENT_ID, STRAVA_REDIRECT_URL } from '../config/env'
 import { BCRYPT_ROUNDS, TOKEN_BYTES } from '../constants/auth'
 import { stravaStateKey } from '../constants/cache-keys'
@@ -40,6 +42,7 @@ export class StravaService {
     private readonly prisma: PrismaService,
     private readonly cache: CacheService,
     private readonly api: StravaApiClient,
+    private readonly events: EventEmitter2,
   ) {}
 
   /**
@@ -97,7 +100,10 @@ export class StravaService {
       }
       await this.upsertStravaAccount(ticket.userId, tokenResponse, athlete)
       const user = await this.prisma.user.findUniqueOrThrow({ where: { id: ticket.userId } })
-      this.kickoffBackfill(user.id)
+      this.events.emit(
+        StravaConnectedEvent.NAME,
+        new StravaConnectedEvent(user.id, false),
+      )
       return { user, isNew: false }
     }
 
@@ -136,33 +142,17 @@ export class StravaService {
       },
     })
     await this.upsertStravaAccount(newUser.id, tokenResponse, athlete)
-    this.kickoffBackfill(newUser.id)
+    this.events.emit(
+      StravaConnectedEvent.NAME,
+      new StravaConnectedEvent(newUser.id, true),
+    )
     return { user: newUser, isNew: true }
   }
 
   public async syncActivities(userId: string): Promise<StravaSyncResult> {
     const accessToken = await this.getValidAccessToken(userId)
-    const summaries = await this.api.listActivities(accessToken, 30, 1)
+    const summaries = await this.api.listActivities(accessToken, 200, 1, 'LIVE_SYNC')
     return this.upsertActivities(userId, summaries)
-  }
-
-  /**
-   * Pull the next page of older activities. Page is computed from the count of
-   * already-imported Strava activities, so repeated calls keep walking backward
-   * through the user's history. Returns `hasMore: false` when Strava returns a
-   * partial page (signal that we've reached the end).
-   */
-  public async syncOlder(userId: string): Promise<StravaSyncResult & { hasMore: boolean }> {
-    const PER_PAGE = 30
-    const existing = await this.prisma.activity.count({
-      where: { userId, externalId: { startsWith: 'strava:' } },
-    })
-    const page = Math.floor(existing / PER_PAGE) + 1
-
-    const accessToken = await this.getValidAccessToken(userId)
-    const summaries = await this.api.listActivities(accessToken, PER_PAGE, page)
-    const result = await this.upsertActivities(userId, summaries)
-    return { ...result, hasMore: summaries.length === PER_PAGE }
   }
 
   public async disconnect(userId: string): Promise<void> {
@@ -253,12 +243,6 @@ export class StravaService {
       },
     })
     return refreshed.access_token
-  }
-
-  private kickoffBackfill(userId: string): void {
-    this.syncActivities(userId).catch((err: Error) => {
-      this.logger.warn(`Strava initial backfill failed for ${userId}: ${err.message}`)
-    })
   }
 
   private async upsertActivities(

@@ -74,19 +74,6 @@ export class StravaController {
     return this.respondWithSync(req, res, result, 'Synced from Strava.')
   }
 
-  @Post('strava/sync-older')
-  public async syncOlder(
-    @CurrentUser() user: User,
-    @Req() req: Request,
-    @Res() res: Response,
-  ) {
-    const result = await this.stravaService.syncOlder(user.id)
-    const fallback = result.hasMore
-      ? 'Loaded older activities.'
-      : 'No older activities left to import — all caught up.'
-    return this.respondWithSync(req, res, result, fallback, { allCaughtUp: !result.hasMore })
-  }
-
   @Post('strava/disconnect')
   public async disconnect(@CurrentUser() user: User, @Req() req: Request, @Res() res: Response) {
     await this.stravaService.disconnect(user.id)

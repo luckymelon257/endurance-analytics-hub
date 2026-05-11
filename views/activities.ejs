@@ -35,17 +35,6 @@
   >
     <%- include('partials/activities-list-island', { activities }) %>
   </div>
-
-  <% if (activities.length > 0) { %>
-    <button
-      type="button"
-      hx-post="/strava/sync-older"
-      hx-swap="none"
-      class="mt-6 self-center rounded-lg border border-border bg-card px-4 py-2 text-sm font-semibold text-ink-muted shadow-sm transition hover:bg-stone-50 hover:text-ink"
-    >
-      Load older activities from Strava
-    </button>
-  <% } %>
 </main>
 
 <%- include('partials/footer') %>

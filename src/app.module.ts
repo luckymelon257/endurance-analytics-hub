@@ -1,5 +1,7 @@
 import { Module } from '@nestjs/common'
 import { APP_GUARD } from '@nestjs/core'
+import { EventEmitterModule } from '@nestjs/event-emitter'
+import { ScheduleModule } from '@nestjs/schedule'
 import { AppController } from './app.controller'
 import { AppService } from './app.service'
 import { ActivitiesModule } from './activities/activities.module'
@@ -13,6 +15,8 @@ import { ViteAssetsModule } from './vite-assets/vite-assets.module'
 
 @Module({
   imports: [
+    EventEmitterModule.forRoot(),
+    ScheduleModule.forRoot(),
     PrismaModule,
     CacheModule,
     AuthModule,
