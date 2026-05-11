@@ -77,6 +77,22 @@ export class AuthController {
     }
   }
 
+  /**
+   * Confirm a settings-page email-change request. Public so users coming from
+   * the link in their email (possibly in a different browser session) can land
+   * on it — the token itself is the proof of intent.
+   */
+  @Public()
+  @Get('confirm-email-change')
+  public async confirmEmailChange(@Query('token') token: string, @Res() res: Response) {
+    try {
+      await this.authService.confirmEmailChange(token)
+      return res.redirect('/settings?email_changed=1')
+    } catch {
+      return res.redirect('/settings?email_change_error=1')
+    }
+  }
+
   @Public()
   @Post('login')
   public async login(@Body() dto: LoginDto, @Res() res: Response) {
@@ -85,10 +101,9 @@ export class AuthController {
   }
 
   @Post('logout')
-  @HttpCode(HttpStatus.OK)
-  public logout(@Res({ passthrough: true }) res: Response): OperationMessage {
+  public logout(@Res() res: Response) {
     this.authService.logout(res)
-    return { message: 'Logged out' }
+    return res.redirect('/auth/login')
   }
 
   @Public()

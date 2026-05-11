@@ -1,103 +1,98 @@
 <%- include('partials/head', { title }) %>
 <%- include('partials/navbar', { user }) %>
 
-<div class="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8 py-8 min-h-screen flex flex-col">
+<main class="mx-auto flex min-h-screen max-w-7xl flex-col px-4 py-8 sm:px-6 lg:px-8">
   <% if (stravaFlash === 'connected') { %>
-    <div class="mb-6 rounded-lg bg-green-50 px-4 py-3 text-sm text-green-700 ring-1 ring-green-600/20">
+    <div role="status" class="mb-6 rounded-xl bg-emerald-50 px-4 py-3 text-sm text-emerald-800 ring-1 ring-inset ring-emerald-600/20">
       Strava connected. Your recent activities are syncing in the background — refresh in a moment.
     </div>
   <% } else if (stravaFlash === 'new') { %>
-    <div class="mb-6 rounded-lg bg-blue-50 px-4 py-3 text-sm text-blue-700 ring-1 ring-blue-600/20">
+    <div role="status" class="mb-6 rounded-xl bg-brand-50 px-4 py-3 text-sm text-brand-800 ring-1 ring-inset ring-brand/20">
       Welcome! We created your account from your Strava profile. Set a real email and password from your profile when you're ready.
     </div>
   <% } else if (stravaFlash === 'disconnected') { %>
-    <div class="mb-6 rounded-lg bg-gray-50 px-4 py-3 text-sm text-gray-700 ring-1 ring-gray-300">
+    <div role="status" class="mb-6 rounded-xl bg-stone-100 px-4 py-3 text-sm text-ink-muted ring-1 ring-inset ring-border">
       Strava disconnected.
     </div>
   <% } %>
 
-  <div class="mb-8">
-    <h1 class="text-2xl font-bold text-gray-900">Welcome back, <%= user.firstName %>!</h1>
-    <p class="mt-1 text-sm text-gray-500">
+  <header class="mb-8">
+    <h1 class="text-2xl font-bold tracking-tight text-ink sm:text-3xl">
+      Welcome back, <%= user.firstName %>!
+    </h1>
+    <p class="mt-1 flex items-center gap-2 text-sm text-ink-muted">
       Here's your training overview.
-      <span class="ml-2 inline-flex items-center rounded-full bg-blue-50 px-2 py-0.5 text-xs font-medium text-blue-700 ring-1 ring-blue-700/10">
+      <span class="inline-flex items-center rounded-full bg-brand-50 px-2 py-0.5 text-xs font-medium text-brand-700 ring-1 ring-inset ring-brand/20">
         <%= user.role %>
       </span>
     </p>
-  </div>
+  </header>
 
   <!-- Strava integration -->
-  <div class="mb-8 overflow-hidden rounded-xl bg-white shadow-sm ring-1 ring-gray-200">
-    <div class="flex items-center justify-between px-6 py-4">
+  <section
+    aria-labelledby="strava-heading"
+    class="mb-6 overflow-hidden rounded-2xl bg-card shadow-sm ring-1 ring-border"
+  >
+    <div class="flex flex-col items-start justify-between gap-3 px-6 py-4 sm:flex-row sm:items-center">
       <div class="flex items-center gap-3">
-        <span class="text-2xl" aria-hidden="true">🟧</span>
+        <span class="flex h-10 w-10 items-center justify-center rounded-xl bg-brand/10 text-brand" aria-hidden="true">
+          <svg class="h-5 w-5" viewBox="0 0 24 24" fill="currentColor">
+            <path d="m15.387 17.944-2.089-4.116h-3.065L15.387 24l5.15-10.172h-3.066m-7.008-5.599 2.836 5.598h4.172L10.463 0l-7 13.828h4.169" />
+          </svg>
+        </span>
         <div>
-          <p class="text-sm font-semibold text-gray-900">Strava</p>
+          <p id="strava-heading" class="text-sm font-semibold text-ink">Strava</p>
           <% if (stravaConnected) { %>
-            <p class="text-xs text-gray-500">
+            <p class="text-xs text-ink-muted">
               Connected<% if (stravaAthleteName) { %> as <%= stravaAthleteName %><% } %>
             </p>
           <% } else { %>
-            <p class="text-xs text-gray-500">Not connected — link your account to import activities.</p>
+            <p class="text-xs text-ink-muted">Not connected — link your account to import activities.</p>
           <% } %>
         </div>
       </div>
+
       <div class="flex items-center gap-2">
         <% if (stravaConnected) { %>
-          <form method="POST" action="/strava/sync">
-            <button type="submit"
-              class="rounded-lg bg-blue-600 px-3 py-1.5 text-sm font-semibold text-white shadow-sm hover:bg-blue-700">
-              Sync from Strava
-            </button>
-          </form>
-          <form method="POST" action="/strava/disconnect">
-            <button type="submit"
-              class="rounded-lg border border-gray-300 bg-white px-3 py-1.5 text-sm font-semibold text-gray-700 shadow-sm hover:bg-gray-50">
-              Disconnect
-            </button>
-          </form>
+          <button
+            type="button"
+            hx-post="/strava/sync"
+            hx-swap="none"
+            class="rounded-lg bg-brand px-3 py-1.5 text-sm font-semibold text-white shadow-sm transition hover:bg-brand-700 disabled:opacity-60"
+          >
+            Sync from Strava
+          </button>
+          <button
+            type="button"
+            hx-post="/strava/disconnect"
+            hx-swap="none"
+            hx-confirm="Disconnect Strava? You can reconnect any time."
+            class="rounded-lg border border-border bg-card px-3 py-1.5 text-sm font-semibold text-ink-muted shadow-sm transition hover:bg-stone-50 hover:text-ink"
+          >
+            Disconnect
+          </button>
         <% } else { %>
-          <a href="/auth/strava/connect"
-            class="rounded-lg bg-orange-600 px-3 py-1.5 text-sm font-semibold text-white shadow-sm hover:bg-orange-700">
+          <a href="/auth/strava/connect" class="rounded-lg bg-brand px-3 py-1.5 text-sm font-semibold text-white shadow-sm transition hover:bg-brand-700">
             Link Strava
           </a>
         <% } %>
       </div>
     </div>
-  </div>
+  </section>
 
-  <!-- Stats grid -->
-  <div class="grid grid-cols-1 gap-5 sm:grid-cols-2 lg:grid-cols-4 mb-8">
-    <% const stats = [
-      { label: 'Total Activities', value: '—', icon: '🏃' },
-      { label: 'This Week',        value: '—', icon: '📅' },
-      { label: 'Total Distance',   value: '—', icon: '📍' },
-      { label: 'Avg Heart Rate',   value: '—', icon: '❤️' },
-    ] %>
-    <% stats.forEach(s => { %>
-      <div class="overflow-hidden rounded-xl bg-white px-6 py-5 shadow-sm ring-1 ring-gray-200">
-        <div class="flex items-center justify-between">
-          <p class="text-sm font-medium text-gray-500"><%= s.label %></p>
-          <span class="text-xl"><%= s.icon %></span>
-        </div>
-        <p class="mt-2 text-3xl font-bold text-gray-900"><%= s.value %></p>
-      </div>
-    <% }) %>
+  <!--
+    Dashboard data sections: stats / heatmap / recent / weekly volume.
+    Wrapped so a syncCompleted event (dispatched by the server's HX-Trigger
+    header after /strava/sync) can re-fetch this partial without a page reload.
+  -->
+  <div
+    id="dashboard-data"
+    hx-get="/partials/dashboard/data"
+    hx-trigger="syncCompleted from:body"
+    hx-swap="innerHTML"
+  >
+    <%- include('partials/dashboard-data', { dashboard, stravaConnected }) %>
   </div>
-
-  <!-- Recent activities placeholder -->
-  <div class="overflow-hidden rounded-xl bg-white shadow-sm ring-1 ring-gray-200">
-    <div class="flex items-center justify-between px-6 py-4 border-b border-gray-100">
-      <h2 class="text-sm font-semibold text-gray-900">Recent Activities</h2>
-      <a href="/activities" class="text-sm text-blue-600 hover:underline font-medium">View all</a>
-    </div>
-    <div id="activities-list" class="divide-y divide-gray-100">
-      <div class="px-6 py-10 text-center text-sm text-gray-400">
-        No activities yet.
-        <a href="/activities/new" class="ml-1 text-blue-600 hover:underline">Log your first one →</a>
-      </div>
-    </div>
-  </div>
-</div>
+</main>
 
 <%- include('partials/footer') %>

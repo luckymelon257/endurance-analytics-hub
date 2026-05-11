@@ -3,9 +3,13 @@
   "version": "0.1.0",
   "private": true,
   "scripts": {
-    "build": "nest build",
+    "build": "nest build && vite build",
+    "build:server": "nest build",
+    "build:client": "vite build",
     "start": "nest start",
-    "start:dev": "nest start --watch",
+    "start:dev": "concurrently -n nest,vite -c blue,magenta \"nest start --watch\" \"vite\"",
+    "start:dev:server": "nest start --watch",
+    "start:dev:client": "vite",
     "start:prod": "node dist/main"
   },
   "dependencies": {
@@ -36,8 +40,19 @@
     "@types/express": "^5.0.0",
     "@types/node": "^20.17.0",
     "@types/passport-jwt": "^4.0.1",
+    "@types/react": "^19.2.14",
+    "@types/react-dom": "^19.2.3",
+    "@vitejs/plugin-react": "^6.0.1",
+    "autoprefixer": "^10.5.0",
+    "concurrently": "^9.2.1",
+    "postcss": "^8.5.14",
     "prisma": "^6.19.3",
+    "react": "^19.2.6",
+    "react-dom": "^19.2.6",
+    "recharts": "^3.8.1",
+    "tailwindcss": "^3.4.19",
     "ts-node": "^10.9.2",
-    "typescript": "^5.6.0"
+    "typescript": "^5.6.0",
+    "vite": "^8.0.11"
   }
 }

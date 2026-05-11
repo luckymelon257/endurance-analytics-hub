@@ -8,5 +8,6 @@ import { StravaService } from './strava.service'
   imports: [AuthModule],
   controllers: [StravaController],
   providers: [StravaService, StravaApiClient],
+  exports: [StravaService, StravaApiClient],
 })
 export class StravaModule {}

@@ -1,0 +1,133 @@
+<%
+  const stats = dashboard.stats
+  const recent = dashboard.recent
+
+  const sportIcons = {
+    RUNNING: '🏃', CYCLING: '🚴', SWIMMING: '🏊', ROWING: '🚣', OTHER: '⚡',
+  }
+
+  function fmtDistance(m) {
+    if (m === null || m <= 0) return '—'
+    const km = m / 1000
+    const decimals = km >= 100 ? 0 : km >= 10 ? 1 : 2
+    return km.toFixed(decimals) + ' km'
+  }
+
+  function fmtDuration(s) {
+    if (s === null || s <= 0) return '—'
+    const h = Math.floor(s / 3600)
+    const m = Math.floor((s % 3600) / 60)
+    const sec = Math.floor(s % 60)
+    const pad = (n) => n.toString().padStart(2, '0')
+    return h > 0 ? `${h}:${pad(m)}:${pad(sec)}` : `${m}:${pad(sec)}`
+  }
+
+  function fmtDate(iso) {
+    if (!iso) return '—'
+    const d = new Date(iso)
+    return d.toLocaleString(undefined, {
+      weekday: 'short', month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit',
+    })
+  }
+
+  const totalKm = stats.totalDistanceMeters > 0
+    ? (stats.totalDistanceMeters / 1000).toFixed(1) + ' km'
+    : '—'
+  const tiles = [
+    { label: 'Total activities', value: stats.totalActivities.toString(), icon: '🏃' },
+    { label: 'This week',        value: stats.thisWeekCount.toString(),   icon: '📅' },
+    { label: 'Total distance',   value: totalKm,                          icon: '📍' },
+    { label: 'Avg heart rate',   value: stats.avgHeartRate !== null ? stats.avgHeartRate + ' bpm' : '—', icon: '❤️' },
+  ]
+%>
+
+<!-- Stats grid -->
+<section aria-label="Training summary" class="mb-6 grid grid-cols-2 gap-4 sm:grid-cols-4">
+  <% tiles.forEach((s) => { %>
+    <article class="overflow-hidden rounded-2xl bg-card px-5 py-4 shadow-sm ring-1 ring-border">
+      <div class="flex items-center justify-between">
+        <p class="text-xs font-medium uppercase tracking-wide text-ink-muted"><%= s.label %></p>
+        <span class="text-base" aria-hidden="true"><%= s.icon %></span>
+      </div>
+      <p class="mt-1 text-2xl font-bold tabular-nums text-ink sm:text-3xl"><%= s.value %></p>
+    </article>
+  <% }) %>
+</section>
+
+<!-- Heatmap + recent activities side-by-side on desktop, stacked on mobile -->
+<div class="mb-6 grid gap-6 lg:grid-cols-3">
+  <section
+    aria-labelledby="heatmap-heading"
+    class="overflow-hidden rounded-2xl bg-card p-5 shadow-sm ring-1 ring-border lg:col-span-2"
+  >
+    <header class="mb-4 flex items-baseline justify-between">
+      <h2 id="heatmap-heading" class="text-sm font-semibold text-ink">Training consistency</h2>
+      <p class="text-xs text-ink-muted">Last 16 weeks</p>
+    </header>
+    <div
+      data-island="training-heatmap"
+      data-props="<%= JSON.stringify({ days: dashboard.heatmap }) %>"
+    >
+      <div class="text-sm text-ink-muted">Loading heatmap…</div>
+    </div>
+  </section>
+
+  <section
+    aria-labelledby="recent-heading"
+    class="overflow-hidden rounded-2xl bg-card shadow-sm ring-1 ring-border"
+  >
+    <header class="flex items-baseline justify-between border-b border-border px-5 py-3">
+      <h2 id="recent-heading" class="text-sm font-semibold text-ink">Recent activities</h2>
+      <a href="/activities" class="text-xs font-medium text-brand hover:text-brand-700">View all →</a>
+    </header>
+
+    <% if (recent.length === 0) { %>
+      <p class="px-5 py-8 text-center text-sm text-ink-muted">
+        No activities yet.
+        <% if (stravaConnected) { %>
+          <br />Click <strong>Sync from Strava</strong> to import.
+        <% } else { %>
+          <br /><a href="/auth/strava/connect" class="text-brand hover:text-brand-700">Connect Strava</a> to start.
+        <% } %>
+      </p>
+    <% } else { %>
+      <ul class="divide-y divide-border">
+        <% recent.forEach((a) => { %>
+          <li>
+            <a
+              href="/activities/<%= a.id %>"
+              class="flex items-center gap-3 px-5 py-3 transition hover:bg-stone-50/60"
+            >
+              <span aria-hidden="true" class="text-xl"><%= sportIcons[a.sportType] %></span>
+              <div class="min-w-0 flex-1">
+                <p class="truncate text-sm font-medium text-ink"><%= a.title %></p>
+                <p class="text-xs text-ink-muted"><%= fmtDate(a.startedAt) %></p>
+              </div>
+              <div class="text-right">
+                <p class="text-sm font-semibold tabular-nums text-ink"><%= fmtDistance(a.distanceMeters) %></p>
+                <p class="text-xs tabular-nums text-ink-muted"><%= fmtDuration(a.durationSeconds) %></p>
+              </div>
+            </a>
+          </li>
+        <% }) %>
+      </ul>
+    <% } %>
+  </section>
+</div>
+
+<!-- Weekly volume chart -->
+<section
+  aria-labelledby="weekly-heading"
+  class="overflow-hidden rounded-2xl bg-card p-5 shadow-sm ring-1 ring-border"
+>
+  <header class="mb-4 flex items-baseline justify-between">
+    <h2 id="weekly-heading" class="text-sm font-semibold text-ink">Weekly volume</h2>
+    <p class="text-xs text-ink-muted">Last 12 weeks · stacked by sport</p>
+  </header>
+  <div
+    data-island="weekly-volume"
+    data-props="<%= JSON.stringify({ bins: dashboard.weeklyVolume }) %>"
+  >
+    <div class="text-sm text-ink-muted">Loading chart…</div>
+  </div>
+</section>

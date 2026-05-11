@@ -1,0 +1,55 @@
+<section
+  id="settings-danger-card"
+  aria-labelledby="danger-heading"
+  class="overflow-hidden rounded-2xl bg-card shadow-sm ring-1 ring-rose-300/60"
+>
+  <header class="border-b border-rose-200 bg-rose-50/40 px-6 py-4">
+    <h2 id="danger-heading" class="text-base font-semibold text-rose-800">Danger zone</h2>
+    <p class="mt-1 text-sm text-rose-700/80">
+      Permanently delete your account, activities, and any linked services. This cannot be undone.
+    </p>
+  </header>
+
+  <form
+    hx-post="/settings/account/delete"
+    hx-target="#settings-danger-card"
+    hx-swap="outerHTML"
+    hx-confirm="Are you absolutely sure? Every activity, training block, and Strava link tied to this account will be erased."
+    class="space-y-3 px-6 py-5"
+  >
+    <label class="block text-sm">
+      <span class="block font-medium text-ink">
+        Type <code class="rounded bg-stone-100 px-1 py-0.5">DELETE my account</code> to confirm
+      </span>
+      <input
+        type="text"
+        name="confirmation"
+        required
+        autocomplete="off"
+        class="mt-1 w-full rounded-lg border border-border bg-card px-3 py-2 text-sm shadow-sm focus:border-rose-500 focus:outline-none focus:ring-1 focus:ring-rose-500"
+      />
+    </label>
+
+    <% if (!settings.isPlaceholderEmail) { %>
+      <label class="block text-sm">
+        <span class="block font-medium text-ink">Current password</span>
+        <input
+          type="password"
+          name="password"
+          required
+          autocomplete="current-password"
+          class="mt-1 w-full rounded-lg border border-border bg-card px-3 py-2 text-sm shadow-sm focus:border-rose-500 focus:outline-none focus:ring-1 focus:ring-rose-500"
+        />
+      </label>
+    <% } %>
+
+    <div>
+      <button
+        type="submit"
+        class="rounded-lg bg-rose-600 px-3 py-1.5 text-sm font-semibold text-white shadow-sm transition hover:bg-rose-700"
+      >
+        Delete my account
+      </button>
+    </div>
+  </form>
+</section>

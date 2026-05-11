@@ -1,6 +1,7 @@
 import { Controller, Get, Query, Render, Res, UseGuards } from '@nestjs/common'
 import { User } from '@prisma/client'
 import { Response } from 'express'
+import { ActivitiesService } from './activities/activities.service'
 import { CurrentUser } from './auth/decorators/current-user.decorator'
 import { Public } from './auth/decorators/public.decorator'
 import { WebAuthGuard } from './auth/guards/web-auth.guard'
@@ -8,7 +9,10 @@ import { PrismaService } from './prisma/prisma.service'
 
 @Controller()
 export class AppController {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly activitiesService: ActivitiesService,
+  ) {}
 
   @Public()
   @Get()
@@ -24,17 +28,36 @@ export class AppController {
     @CurrentUser() user: User,
     @Query('strava') stravaFlash?: 'connected' | 'new' | 'disconnected',
   ) {
-    const stravaAccount = await this.prisma.stravaAccount.findUnique({
-      where: { userId: user.id },
-    })
+    const [stravaAccount, dashboard] = await Promise.all([
+      this.prisma.stravaAccount.findUnique({ where: { userId: user.id } }),
+      this.activitiesService.getDashboardData(user.id),
+    ])
+
     return {
       title: 'Dashboard',
       user,
+      dashboard,
       stravaConnected: stravaAccount !== null,
       stravaAthleteName: stravaAccount
         ? `${stravaAccount.athleteFirstName ?? ''} ${stravaAccount.athleteLastName ?? ''}`.trim()
         : null,
       stravaFlash: stravaFlash ?? null,
     }
+  }
+
+  /**
+   * HTMX partial: just the dashboard data sections (stats / heatmap / recent /
+   * weekly volume). Refreshed in-place after Strava sync, no full page reload.
+   */
+  @Public()
+  @UseGuards(WebAuthGuard)
+  @Get('partials/dashboard/data')
+  @Render('partials/dashboard-data')
+  public async dashboardData(@CurrentUser() user: User) {
+    const [stravaAccount, dashboard] = await Promise.all([
+      this.prisma.stravaAccount.findUnique({ where: { userId: user.id } }),
+      this.activitiesService.getDashboardData(user.id),
+    ])
+    return { dashboard, stravaConnected: stravaAccount !== null }
   }
 }

@@ -1,0 +1,49 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer components {
+  /**
+   * Decorative topographic-contour pattern used on auth brand panels.
+   * Marked aria-hidden at the consumer level — purely visual.
+   */
+  .bg-topo {
+    background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='240' height='240' viewBox='0 0 240 240'><g fill='none' stroke='white' stroke-width='0.7' opacity='0.18'><ellipse cx='120' cy='120' rx='40' ry='28'/><ellipse cx='120' cy='120' rx='62' ry='46'/><ellipse cx='120' cy='120' rx='86' ry='66'/><ellipse cx='120' cy='120' rx='112' ry='86'/><ellipse cx='120' cy='120' rx='140' ry='108'/></g></svg>");
+    background-size: 240px 240px;
+    background-repeat: repeat;
+  }
+
+  /**
+   * App logo as a CSS mask so we can color it with currentColor (text-brand,
+   * text-white, etc.) without inlining the SVG markup on every page. The SVG
+   * itself is loaded once by the browser and cached.
+   */
+  .logo-mask {
+    display: inline-block;
+    mask-image: url('/images/logo.svg');
+    -webkit-mask-image: url('/images/logo.svg');
+    mask-repeat: no-repeat;
+    -webkit-mask-repeat: no-repeat;
+    mask-position: center;
+    -webkit-mask-position: center;
+    mask-size: contain;
+    -webkit-mask-size: contain;
+    background-color: currentColor;
+  }
+}
+
+@layer utilities {
+  .tabular-nums {
+    font-variant-numeric: tabular-nums;
+  }
+}
+
+/**
+ * Visible focus ring for keyboard users. Relies on focus-visible so it doesn't
+ * appear on mouse clicks. Overrides the browser default at the cost of being explicit.
+ */
+:where(button, [role='button'], a, input, select, textarea):focus-visible {
+  outline: 2px solid #fc4c02;
+  outline-offset: 2px;
+  border-radius: 8px;
+}

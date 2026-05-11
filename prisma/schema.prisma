@@ -111,9 +111,22 @@ model Activity {
   trainingBlock TrainingBlock? @relation(fields: [trainingBlockId], references: [id], onDelete: SetNull)
   heartRateZones HeartRateZone[]
   laps           ActivityLap[]
+  streamSet      ActivityStreamSet?
 
   @@unique([userId, externalId])
   @@map("activities")
+}
+
+model ActivityStreamSet {
+  Id         String   @id
+  streams    Json
+  activityId String   @unique  
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  activity Activity @relation(fields: [activityId], references: [id], onDelete: Cascade)
+
+  @@map("activity_stream_sets")
 }
 
 model HeartRateZone {

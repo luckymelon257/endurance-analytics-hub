@@ -1,0 +1,90 @@
+<%
+  function fmtConnectedDate(d) {
+    if (!d) return '—'
+    return new Date(d).toLocaleString(undefined, {
+      month: 'short', day: 'numeric', year: 'numeric',
+    })
+  }
+%>
+<section
+  id="settings-connections-card"
+  aria-labelledby="connections-heading"
+  class="overflow-hidden rounded-2xl bg-card shadow-sm ring-1 ring-border"
+>
+  <header class="border-b border-border px-6 py-4">
+    <h2 id="connections-heading" class="text-base font-semibold text-ink">Connections</h2>
+    <p class="mt-1 text-sm text-ink-muted">Third-party services linked to your account.</p>
+  </header>
+
+  <div class="divide-y divide-border">
+    <!-- Strava -->
+    <div class="flex flex-col gap-3 px-6 py-4 sm:flex-row sm:items-center sm:justify-between">
+      <div class="flex items-center gap-3">
+        <span class="flex h-10 w-10 items-center justify-center rounded-xl bg-brand/10 text-brand" aria-hidden="true">
+          <svg class="h-5 w-5" viewBox="0 0 24 24" fill="currentColor">
+            <path d="m15.387 17.944-2.089-4.116h-3.065L15.387 24l5.15-10.172h-3.066m-7.008-5.599 2.836 5.598h4.172L10.463 0l-7 13.828h4.169" />
+          </svg>
+        </span>
+        <div>
+          <p class="text-sm font-semibold text-ink">Strava</p>
+          <% if (settings.strava) { %>
+            <p class="text-xs text-ink-muted">
+              Connected<% if (settings.strava.athleteName) { %> as <%= settings.strava.athleteName %><% } %>
+              · since <%= fmtConnectedDate(settings.strava.connectedAt) %>
+            </p>
+            <p class="mt-0.5 text-xs text-ink-muted">
+              Scopes: <code class="rounded bg-stone-100 px-1 py-0.5"><%= settings.strava.scope %></code>
+            </p>
+          <% } else { %>
+            <p class="text-xs text-ink-muted">Not connected.</p>
+          <% } %>
+        </div>
+      </div>
+      <div>
+        <% if (settings.strava) { %>
+          <button
+            type="button"
+            hx-post="/strava/disconnect"
+            hx-swap="none"
+            hx-confirm="Disconnect Strava? You can reconnect any time — but you'll lose access to new activity imports until you do."
+            class="rounded-lg border border-border bg-card px-3 py-1.5 text-sm font-semibold text-ink-muted shadow-sm transition hover:bg-stone-50 hover:text-ink"
+          >
+            Disconnect
+          </button>
+        <% } else { %>
+          <a
+            href="/auth/strava/connect"
+            class="rounded-lg bg-brand px-3 py-1.5 text-sm font-semibold text-white shadow-sm transition hover:bg-brand-700"
+          >
+            Link Strava
+          </a>
+        <% } %>
+      </div>
+    </div>
+
+    <!-- Email + password sign-in -->
+    <div class="flex items-center justify-between px-6 py-4">
+      <div>
+        <p class="text-sm font-semibold text-ink">Email and password sign-in</p>
+        <p class="mt-0.5 text-xs text-ink-muted">
+          <% if (settings.isPlaceholderEmail) { %>
+            Not configured. Add a real email and password above to enable.
+          <% } else { %>
+            Enabled. Sign in at <code class="rounded bg-stone-100 px-1 py-0.5">/auth/login</code> with <%= user.email %>.
+          <% } %>
+        </p>
+      </div>
+      <span class="text-xs font-medium text-ink-muted">
+        <% if (settings.isPlaceholderEmail) { %>
+          <span class="inline-flex items-center rounded-full bg-stone-100 px-2 py-0.5 text-xs font-medium ring-1 ring-inset ring-border">
+            Not set
+          </span>
+        <% } else { %>
+          <span class="inline-flex items-center rounded-full bg-emerald-50 px-2 py-0.5 text-xs font-medium text-emerald-800 ring-1 ring-inset ring-emerald-600/20">
+            Active
+          </span>
+        <% } %>
+      </span>
+    </div>
+  </div>
+</section>

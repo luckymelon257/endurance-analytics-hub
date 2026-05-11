@@ -1,0 +1,51 @@
+<%- include('partials/head', { title }) %>
+<%- include('partials/navbar', { user }) %>
+
+<main class="mx-auto flex min-h-screen max-w-7xl flex-col px-4 py-8 sm:px-6 lg:px-8">
+  <header class="mb-6 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+    <div>
+      <h1 class="text-2xl font-bold tracking-tight text-ink sm:text-3xl">Activities</h1>
+      <p class="mt-1 text-sm text-ink-muted">
+        <% if (activities.length === 0) { %>
+          Nothing imported yet — connect Strava and click Sync.
+        <% } else { %>
+          Showing the latest <%= activities.length %> imported.
+        <% } %>
+      </p>
+    </div>
+    <button
+      type="button"
+      hx-post="/strava/sync"
+      hx-swap="none"
+      class="self-start rounded-lg bg-brand px-3 py-2 text-sm font-semibold text-white shadow-sm transition hover:bg-brand-700 sm:self-auto"
+    >
+      Sync from Strava
+    </button>
+  </header>
+
+  <!--
+    Activities list island. Wrapper has hx-get so a syncCompleted event refreshes
+    just this section — the React island remounts on the freshly-swapped child.
+  -->
+  <div
+    id="activities-list-container"
+    hx-get="/activities/partials/list"
+    hx-trigger="syncCompleted from:body"
+    hx-swap="innerHTML"
+  >
+    <%- include('partials/activities-list-island', { activities }) %>
+  </div>
+
+  <% if (activities.length > 0) { %>
+    <button
+      type="button"
+      hx-post="/strava/sync-older"
+      hx-swap="none"
+      class="mt-6 self-center rounded-lg border border-border bg-card px-4 py-2 text-sm font-semibold text-ink-muted shadow-sm transition hover:bg-stone-50 hover:text-ink"
+    >
+      Load older activities from Strava
+    </button>
+  <% } %>
+</main>
+
+<%- include('partials/footer') %>

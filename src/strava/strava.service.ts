@@ -104,7 +104,17 @@ export class StravaService {
     // signin
     if (existing) {
       await this.upsertStravaAccount(existing.userId, tokenResponse, athlete)
-      const user = await this.prisma.user.findUniqueOrThrow({ where: { id: existing.userId } })
+      let user = await this.prisma.user.findUniqueOrThrow({ where: { id: existing.userId } })
+      // Self-heal: previous versions left Strava-created users in PENDING. Strava
+      // OAuth itself is the identity proof for these placeholder-email accounts,
+      // so PENDING was wrong (it only blocks email/password login, but they don't
+      // have a real password anyway). Flip them to ACTIVE on next signin.
+      if (user.status === UserStatus.PENDING && user.email.endsWith('@pending.local')) {
+        user = await this.prisma.user.update({
+          where: { id: user.id },
+          data: { status: UserStatus.ACTIVE },
+        })
+      }
       return { user, isNew: false }
     }
 
@@ -119,7 +129,10 @@ export class StravaService {
         firstName: athlete.firstname ?? 'Strava',
         lastName: athlete.lastname ?? 'Athlete',
         passwordHash: unusablePasswordHash,
-        status: UserStatus.PENDING,
+        // ACTIVE: Strava OAuth is the identity proof for these accounts. The
+        // placeholder email is a reminder for "set a real one someday" (the
+        // dashboard surfaces a banner) — not a verification gate.
+        status: UserStatus.ACTIVE,
       },
     })
     await this.upsertStravaAccount(newUser.id, tokenResponse, athlete)
@@ -131,6 +144,25 @@ export class StravaService {
     const accessToken = await this.getValidAccessToken(userId)
     const summaries = await this.api.listActivities(accessToken, 30, 1)
     return this.upsertActivities(userId, summaries)
+  }
+
+  /**
+   * Pull the next page of older activities. Page is computed from the count of
+   * already-imported Strava activities, so repeated calls keep walking backward
+   * through the user's history. Returns `hasMore: false` when Strava returns a
+   * partial page (signal that we've reached the end).
+   */
+  public async syncOlder(userId: string): Promise<StravaSyncResult & { hasMore: boolean }> {
+    const PER_PAGE = 30
+    const existing = await this.prisma.activity.count({
+      where: { userId, externalId: { startsWith: 'strava:' } },
+    })
+    const page = Math.floor(existing / PER_PAGE) + 1
+
+    const accessToken = await this.getValidAccessToken(userId)
+    const summaries = await this.api.listActivities(accessToken, PER_PAGE, page)
+    const result = await this.upsertActivities(userId, summaries)
+    return { ...result, hasMore: summaries.length === PER_PAGE }
   }
 
   public async disconnect(userId: string): Promise<void> {
@@ -198,7 +230,12 @@ export class StravaService {
     })
   }
 
-  private async getValidAccessToken(userId: string): Promise<string> {
+  /**
+   * Returns a non-expired access token for the user, refreshing through Strava
+   * if the stored one is within the leeway window. Throws `UnauthorizedException`
+   * if the user has no `StravaAccount` (never connected, or disconnected).
+   */
+  public async getValidAccessToken(userId: string): Promise<string> {
     const account = await this.prisma.stravaAccount.findUnique({ where: { userId } })
     if (!account) throw new UnauthorizedException('Strava is not connected for this user.')
 
@@ -260,7 +297,6 @@ export class StravaService {
       maxHeartRate: s.max_heartrate ? Math.round(s.max_heartrate) : null,
       avgPaceSecondsPerKm: avgPace,
       avgPowerWatts: s.average_watts ? Math.round(s.average_watts) : null,
-      calories: s.calories ? Math.round(s.calories) : null,
     }
   }
 }

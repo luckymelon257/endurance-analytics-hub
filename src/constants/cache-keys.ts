@@ -9,6 +9,10 @@ export const emailVerifyUserKey = (userId: string) => `email_verify:user:${userI
 
 export const passwordResetTokenKey = (token: string) => `pwd_reset:${token}`
 
+export const emailChangeTokenKey = (token: string) => `email_change:tok:${token}`
+
+export const emailChangeUserKey = (userId: string) => `email_change:user:${userId}`
+
 export const rateLimitVerifyKey = (email: string) => `rl:verify:${email.toLowerCase()}`
 
 export const stravaStateKey = (state: string) => `strava_state:${state}`

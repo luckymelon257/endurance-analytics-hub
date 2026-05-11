@@ -3,8 +3,6 @@ import {
   ConflictException,
   Controller,
   Get,
-  HttpCode,
-  HttpStatus,
   Logger,
   Post,
   Query,
@@ -17,7 +15,6 @@ import { Request, Response } from 'express'
 import { AuthService } from '../auth/auth.service'
 import { CurrentUser } from '../auth/decorators/current-user.decorator'
 import { Public } from '../auth/decorators/public.decorator'
-import { OperationMessage } from '../common/types'
 import { JWT_SECRET } from '../config/env'
 import { AUTH_COOKIE_NAME } from '../constants/auth'
 import { PrismaService } from '../prisma/prisma.service'
@@ -25,6 +22,7 @@ import { StravaSyncResult } from './entities'
 import { StravaService } from './strava.service'
 
 type StravaErrorCode = 'denied' | 'invalid' | 'scope' | 'conflict' | 'failed'
+type ToastKind = 'success' | 'error' | 'info'
 
 @Controller()
 export class StravaController {
@@ -71,16 +69,79 @@ export class StravaController {
   }
 
   @Post('strava/sync')
-  @HttpCode(HttpStatus.OK)
-  public async sync(@CurrentUser() user: User): Promise<StravaSyncResult> {
-    return this.stravaService.syncActivities(user.id)
+  public async sync(@CurrentUser() user: User, @Req() req: Request, @Res() res: Response) {
+    const result = await this.stravaService.syncActivities(user.id)
+    return this.respondWithSync(req, res, result, 'Synced from Strava.')
+  }
+
+  @Post('strava/sync-older')
+  public async syncOlder(
+    @CurrentUser() user: User,
+    @Req() req: Request,
+    @Res() res: Response,
+  ) {
+    const result = await this.stravaService.syncOlder(user.id)
+    const fallback = result.hasMore
+      ? 'Loaded older activities.'
+      : 'No older activities left to import — all caught up.'
+    return this.respondWithSync(req, res, result, fallback, { allCaughtUp: !result.hasMore })
   }
 
   @Post('strava/disconnect')
-  @HttpCode(HttpStatus.OK)
-  public async disconnect(@CurrentUser() user: User): Promise<OperationMessage> {
+  public async disconnect(@CurrentUser() user: User, @Req() req: Request, @Res() res: Response) {
     await this.stravaService.disconnect(user.id)
-    return { message: 'Strava disconnected.' }
+    if (this.isHtmx(req)) {
+      // The Strava panel structure changes (Sync/Disconnect → Link), so a full
+      // refresh is simpler than partial-swap dance. Toast + reload.
+      res.setHeader('HX-Trigger', this.buildTrigger('Strava disconnected.', 'info'))
+      res.setHeader('HX-Refresh', 'true')
+      return res.status(204).end()
+    }
+    return res.redirect('/dashboard?strava=disconnected')
+  }
+
+  /**
+   * Build a sync-completed response. HTMX clients get a toast + a syncCompleted
+   * custom event (which the dashboard / activities views listen for to re-fetch
+   * their data partials). Non-HTMX clients get the legacy redirect.
+   */
+  private respondWithSync(
+    req: Request,
+    res: Response,
+    result: StravaSyncResult,
+    fallbackMessage: string,
+    extras: { allCaughtUp?: boolean } = {},
+  ) {
+    const toastMessage = formatSyncToast(result, fallbackMessage)
+
+    if (this.isHtmx(req)) {
+      res.setHeader(
+        'HX-Trigger',
+        JSON.stringify({
+          showToast: { message: toastMessage, kind: 'success' satisfies ToastKind },
+          syncCompleted: true,
+        }),
+      )
+      return res.status(204).end()
+    }
+
+    // Non-HTMX fallback: redirect to wherever the form was submitted from, with
+    // a query param for the server-rendered flash banner.
+    const target = req.headers.referer ?? '/dashboard'
+    const url = new URL(target, 'http://placeholder')
+    if (extras.allCaughtUp) url.searchParams.set('synced', 'all')
+    else if (result.created > 0) url.searchParams.set('synced', String(result.created))
+    return res.redirect(url.pathname + url.search)
+  }
+
+  private isHtmx(req: Request): boolean {
+    return req.headers['hx-request'] === 'true'
+  }
+
+  private buildTrigger(message: string, kind: ToastKind, extraEvents: string[] = []): string {
+    const payload: Record<string, unknown> = { showToast: { message, kind } }
+    for (const evt of extraEvents) payload[evt] = true
+    return JSON.stringify(payload)
   }
 
   /**
@@ -116,4 +177,19 @@ export class StravaController {
   private redirectWithError(res: Response, code: StravaErrorCode) {
     return res.redirect(`/auth/login?strava_error=${code}`)
   }
+}
+
+/**
+ * Render the per-sync toast string. "3 created, 12 updated" if there's anything,
+ * otherwise the caller's contextual fallback ("No older activities…", etc.).
+ */
+function formatSyncToast(result: StravaSyncResult, fallback: string): string {
+  const { created, updated } = result
+  if (created === 0 && updated === 0) return fallback
+
+  const parts: string[] = []
+  if (created > 0) parts.push(`${created} new`)
+  if (updated > 0) parts.push(`${updated} updated`)
+  const noun = created + updated === 1 ? 'activity' : 'activities'
+  return `${parts.join(', ')} ${noun}.`
 }

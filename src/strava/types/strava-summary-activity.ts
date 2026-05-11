@@ -18,5 +18,8 @@ export interface StravaSummaryActivity {
   /** Meters per second. */
   average_speed?: number
   average_watts?: number
-  calories?: number
+  /**
+   * Note: Strava does NOT return `calories` from the activities-list endpoint —
+   * only from the per-activity detail endpoint. See `StravaDetailedActivity`.
+   */
 }

@@ -1,0 +1,114 @@
+<%- include('partials/head', { title }) %>
+<%- include('partials/navbar', { user }) %>
+
+<%
+  const a = detail.activity
+
+  const sportIcons = {
+    RUNNING: '🏃',
+    CYCLING: '🚴',
+    SWIMMING: '🏊',
+    ROWING:  '🚣',
+    OTHER:   '⚡',
+  }
+
+  function fmtDistance(m) {
+    if (m === null || m <= 0) return '—'
+    const km = m / 1000
+    const decimals = km >= 100 ? 0 : km >= 10 ? 1 : 2
+    return km.toFixed(decimals) + ' km'
+  }
+
+  function fmtDuration(s) {
+    if (s === null || s <= 0) return '—'
+    const h = Math.floor(s / 3600)
+    const m = Math.floor((s % 3600) / 60)
+    const sec = Math.floor(s % 60)
+    const pad = (n) => n.toString().padStart(2, '0')
+    return h > 0 ? `${h}:${pad(m)}:${pad(sec)}` : `${m}:${pad(sec)}`
+  }
+
+  function fmtPaceOrSpeed(sport, secondsPerKm) {
+    if (secondsPerKm === null || secondsPerKm <= 0) return '—'
+    if (sport === 'CYCLING' || sport === 'ROWING') {
+      return (3600 / secondsPerKm).toFixed(1) + ' km/h'
+    }
+    const m = Math.floor(secondsPerKm / 60)
+    const s = Math.floor(secondsPerKm % 60)
+    return `${m}:${s.toString().padStart(2, '0')} /km`
+  }
+
+  function fmtNumber(n, suffix) {
+    return n === null ? '—' : Math.round(n) + (suffix ? ' ' + suffix : '')
+  }
+
+  function fmtDate(iso) {
+    if (!iso) return '—'
+    const d = new Date(iso)
+    return d.toLocaleString(undefined, {
+      weekday: 'long', month: 'long', day: 'numeric', year: 'numeric',
+      hour: 'numeric', minute: '2-digit',
+    })
+  }
+
+  const stats = [
+    { label: 'Distance',       value: fmtDistance(a.distanceMeters) },
+    { label: 'Duration',       value: fmtDuration(a.durationSeconds) },
+    { label: 'Pace / Speed',   value: fmtPaceOrSpeed(a.sportType, a.avgPaceSecondsPerKm) },
+    { label: 'Elevation gain', value: fmtNumber(a.elevationGainMeters, 'm') },
+    { label: 'Avg heart rate', value: a.avgHeartRate !== null ? a.avgHeartRate + ' bpm' : '—' },
+    { label: 'Max heart rate', value: a.maxHeartRate !== null ? a.maxHeartRate + ' bpm' : '—' },
+    { label: 'Avg power',      value: a.avgPowerWatts !== null ? a.avgPowerWatts + ' W' : '—' },
+    { label: 'Calories',       value: a.calories !== null ? a.calories + ' kcal' : '—' },
+  ]
+%>
+
+<main class="mx-auto flex min-h-screen max-w-5xl flex-col px-4 py-8 sm:px-6 lg:px-8">
+  <nav aria-label="Breadcrumb" class="mb-4 text-sm">
+    <a href="/activities" class="text-ink-muted hover:text-ink">
+      ← Back to activities
+    </a>
+  </nav>
+
+  <header class="mb-8">
+    <p class="flex items-center gap-2 text-sm text-ink-muted">
+      <span aria-hidden="true" class="text-base"><%= sportIcons[a.sportType] %></span>
+      <%= fmtDate(a.startedAt) %>
+    </p>
+    <h1 class="mt-1 text-2xl font-bold tracking-tight text-ink sm:text-3xl">
+      <%= a.title %>
+    </h1>
+  </header>
+
+  <!-- Summary stats grid -->
+  <section
+    aria-label="Activity summary"
+    class="mb-8 grid grid-cols-2 gap-3 sm:grid-cols-4"
+  >
+    <% stats.forEach((s) => { %>
+      <article class="rounded-2xl bg-card px-4 py-3 shadow-sm ring-1 ring-border">
+        <dt class="text-xs font-medium uppercase tracking-wide text-ink-muted">
+          <%= s.label %>
+        </dt>
+        <dd class="mt-1 text-xl font-bold tabular-nums text-ink">
+          <%= s.value %>
+        </dd>
+      </article>
+    <% }) %>
+  </section>
+
+  <!-- Charts island -->
+  <section aria-labelledby="charts-heading">
+    <h2 id="charts-heading" class="sr-only">Time-series charts</h2>
+    <div
+      data-island="activity-charts"
+      data-props="<%= JSON.stringify(detail) %>"
+    >
+      <div class="rounded-2xl bg-card p-8 text-center text-sm text-ink-muted shadow-sm ring-1 ring-border">
+        Loading charts…
+      </div>
+    </div>
+  </section>
+</main>
+
+<%- include('partials/footer') %>

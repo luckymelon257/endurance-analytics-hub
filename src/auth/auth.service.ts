@@ -1,5 +1,6 @@
 import {
   BadRequestException,
+  ConflictException,
   Injectable,
   NotFoundException,
   UnauthorizedException,
@@ -20,12 +21,15 @@ import {
   TOKEN_BYTES,
 } from '../constants/auth'
 import {
+  emailChangeTokenKey,
+  emailChangeUserKey,
   emailVerifyTokenKey,
   emailVerifyUserKey,
   passwordResetTokenKey,
   rateLimitVerifyKey,
 } from '../constants/cache-keys'
 import {
+  EMAIL_CHANGE_TTL_SECONDS,
   EMAIL_VERIFY_TTL_SECONDS,
   PASSWORD_RESET_TTL_SECONDS,
   RATE_LIMIT_WINDOW_SECONDS,
@@ -189,6 +193,141 @@ export class AuthService {
     return { message: 'Password changed successfully.' }
   }
 
+  /** Update editable profile fields. Returns the fresh User row. */
+  public async updateProfile(
+    userId: string,
+    data: { firstName: string; lastName: string },
+  ): Promise<User> {
+    return this.prisma.user.update({
+      where: { id: userId },
+      data: { firstName: data.firstName, lastName: data.lastName },
+    })
+  }
+
+  /**
+   * Settings-page password setter for Strava-OAuth-only accounts. These users
+   * have an unusable random hash from the OAuth signup flow, so there's no
+   * "current password" to verify — the session cookie is the identity proof.
+   * Refuses on accounts that already have a real password (use `changePassword`).
+   */
+  public async setInitialPassword(userId: string, newPassword: string): Promise<OperationMessage> {
+    const user = await this.prisma.user.findUnique({ where: { id: userId } })
+    if (!user) throw new NotFoundException()
+    if (!isPlaceholderEmail(user.email)) {
+      throw new BadRequestException(
+        'This account already has a password — use Change password instead.',
+      )
+    }
+
+    const passwordHash = await bcrypt.hash(newPassword, BCRYPT_ROUNDS)
+    await this.prisma.user.update({ where: { id: userId }, data: { passwordHash } })
+    return { message: 'Password set.' }
+  }
+
+  /**
+   * Begin an email change. Sends a confirmation link to the *new* address (not
+   * the old one — the old address may already be abandoned, which is exactly
+   * why users change it). The old email keeps working until they click.
+   *
+   * Throws ConflictException if `newEmail` already belongs to another user.
+   */
+  public async requestEmailChange(userId: string, newEmail: string): Promise<OperationMessage> {
+    const user = await this.prisma.user.findUnique({ where: { id: userId } })
+    if (!user) throw new NotFoundException()
+
+    const normalized = newEmail.trim().toLowerCase()
+    if (normalized === user.email.toLowerCase()) {
+      throw new BadRequestException('That is already your email address.')
+    }
+
+    const conflict = await this.prisma.user.findUnique({ where: { email: normalized } })
+    if (conflict && conflict.id !== userId) {
+      throw new ConflictException('That email is already in use.')
+    }
+
+    // Invalidate any previous pending request for this user so the latest one wins.
+    const previousToken = await this.cache.get(emailChangeUserKey(userId))
+    if (previousToken) await this.cache.del(emailChangeTokenKey(previousToken))
+
+    const token = randomBytes(TOKEN_BYTES).toString('hex')
+    const payload = JSON.stringify({ userId, newEmail: normalized })
+    await this.cache.set(emailChangeTokenKey(token), payload, EMAIL_CHANGE_TTL_SECONDS)
+    await this.cache.set(emailChangeUserKey(userId), token, EMAIL_CHANGE_TTL_SECONDS)
+
+    await this.mailer.sendMail({
+      to: normalized,
+      subject: 'Confirm your new email',
+      template: 'change-email',
+      context: {
+        firstName: user.firstName,
+        newEmail: normalized,
+        link: `${APP_URL}/auth/confirm-email-change?token=${token}`,
+      },
+    })
+
+    return { message: `Confirmation sent to ${normalized}.` }
+  }
+
+  /**
+   * Consume an email-change token and atomically update the user's email. Race-
+   * safe against another user grabbing the same email in the window: the unique
+   * constraint on `email` surfaces as a Prisma P2002 error, which we translate.
+   */
+  public async confirmEmailChange(token: string): Promise<{ userId: string; newEmail: string }> {
+    const raw = await this.cache.get(emailChangeTokenKey(token))
+    if (!raw) throw new BadRequestException('This confirmation link is invalid or expired.')
+
+    let userId: string
+    let newEmail: string
+    try {
+      const parsed = JSON.parse(raw) as { userId: string; newEmail: string }
+      userId = parsed.userId
+      newEmail = parsed.newEmail
+    } catch {
+      throw new BadRequestException('This confirmation link is malformed.')
+    }
+
+    try {
+      await this.prisma.user.update({
+        where: { id: userId },
+        data: { email: newEmail, status: UserStatus.ACTIVE },
+      })
+    } catch (err) {
+      // P2002 = unique-constraint violation (someone else took this email in the meantime).
+      if ((err as { code?: string }).code === 'P2002') {
+        await this.cache.del(emailChangeTokenKey(token))
+        await this.cache.del(emailChangeUserKey(userId))
+        throw new ConflictException('That email is already in use.')
+      }
+      throw err
+    }
+
+    await this.cache.del(emailChangeTokenKey(token))
+    await this.cache.del(emailChangeUserKey(userId))
+    return { userId, newEmail }
+  }
+
+  /**
+   * Delete a user and all of their data. Strava-only placeholder accounts skip
+   * the password check (no real password to verify); regular accounts must
+   * supply the current password to confirm.
+   *
+   * Prisma cascades take care of activities, training blocks, and the Strava
+   * account row. The cookie is cleared by the caller.
+   */
+  public async deleteAccount(userId: string, password?: string): Promise<void> {
+    const user = await this.prisma.user.findUnique({ where: { id: userId } })
+    if (!user) throw new NotFoundException()
+
+    if (!isPlaceholderEmail(user.email)) {
+      if (!password) throw new BadRequestException('Password is required to delete this account.')
+      const valid = await bcrypt.compare(password, user.passwordHash)
+      if (!valid) throw new BadRequestException('Password is incorrect.')
+    }
+
+    await this.prisma.user.delete({ where: { id: userId } })
+  }
+
   private async issueVerificationToken(user: User): Promise<void> {
     const previous = await this.cache.get(emailVerifyUserKey(user.id))
     if (previous) {
@@ -209,4 +348,13 @@ export class AuthService {
       },
     })
   }
+}
+
+/**
+ * Strava-only signup creates a User with email `strava-<athleteId>@pending.local`
+ * and a random unusable password hash. We use that suffix as the marker for
+ * "no real credentials yet" everywhere in the settings flows.
+ */
+function isPlaceholderEmail(email: string): boolean {
+  return email.endsWith('@pending.local')
 }

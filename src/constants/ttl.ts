@@ -5,6 +5,8 @@
 
 export const EMAIL_VERIFY_TTL_SECONDS = 60 * 60 * 24 // 24 hours
 
+export const EMAIL_CHANGE_TTL_SECONDS = 60 * 60 * 24 // 24 hours
+
 export const PASSWORD_RESET_TTL_SECONDS = 60 * 60 // 1 hour
 
 export const RATE_LIMIT_WINDOW_SECONDS = 60 * 60 // 1 hour
