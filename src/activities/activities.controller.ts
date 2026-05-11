@@ -1,8 +1,11 @@
 import {
+  BadRequestException,
+  Body,
   Controller,
   Get,
   NotFoundException,
   Param,
+  Post,
   Query,
   Render,
   Res,
@@ -15,6 +18,7 @@ import { Public } from '../auth/decorators/public.decorator'
 import { WebAuthGuard } from '../auth/guards/web-auth.guard'
 import { ActivitiesService } from './activities.service'
 import { ListActivitiesQueryDto } from './dto/list-activities-query.dto'
+import { ManualActivityDto } from './dto/manual-activity.dto'
 
 @Controller('activities')
 export class ActivitiesController {
@@ -65,6 +69,131 @@ export class ActivitiesController {
   ) {
     const page = await this.activitiesService.listForUserPaged(user.id, q.cursor)
     return { activities: page.items, nextCursor: page.nextCursor }
+  }
+
+  @Public()
+  @UseGuards(WebAuthGuard)
+  @Get('new')
+  @Render('activities/form')
+  public newForm(@CurrentUser() user: User) {
+    return {
+      title: 'Add manual activity',
+      user,
+      mode: 'create',
+      formAction: '/activities/new',
+      values: {
+        title: '',
+        sportType: 'RUNNING',
+        startedAt: '',
+        durationMinutes: '',
+        distanceKm: '',
+      },
+      error: null,
+    }
+  }
+
+  @Public()
+  @UseGuards(WebAuthGuard)
+  @Post('new')
+  public async createManual(
+    @CurrentUser() user: User,
+    @Body() dto: ManualActivityDto,
+    @Res() res: Response,
+  ) {
+    try {
+      await this.activitiesService.createManualActivity(user.id, dto)
+      return res.redirect('/dashboard')
+    } catch (err) {
+      if (!(err instanceof BadRequestException)) {
+        throw err
+      }
+
+      return res.status(400).render('activities/form', {
+        title: 'Add manual activity',
+        user,
+        mode: 'create',
+        formAction: '/activities/new',
+        values: dto,
+        error: err.message,
+      })
+    }
+  }
+
+  @Public()
+  @UseGuards(WebAuthGuard)
+  @Get(':id/edit')
+  public async editForm(
+    @CurrentUser() user: User,
+    @Param('id') id: string,
+    @Res() res: Response,
+  ) {
+    try {
+      const values = await this.activitiesService.getManualActivityForEdit(user.id, id)
+      return res.render('activities/form', {
+        title: 'Edit manual activity',
+        user,
+        mode: 'edit',
+        formAction: `/activities/${id}/edit`,
+        values,
+        error: null,
+      })
+    } catch (err) {
+      if (err instanceof NotFoundException) {
+        return res.redirect('/activities')
+      }
+      throw err
+    }
+  }
+
+  @Public()
+  @UseGuards(WebAuthGuard)
+  @Post(':id/edit')
+  public async updateManual(
+    @CurrentUser() user: User,
+    @Param('id') id: string,
+    @Body() dto: ManualActivityDto,
+    @Res() res: Response,
+  ) {
+    try {
+      await this.activitiesService.updateManualActivity(user.id, id, dto)
+      return res.redirect('/dashboard')
+    } catch (err) {
+      if (err instanceof NotFoundException) {
+        return res.redirect('/activities')
+      }
+
+      if (!(err instanceof BadRequestException)) {
+        throw err
+      }
+
+      return res.status(400).render('activities/form', {
+        title: 'Edit manual activity',
+        user,
+        mode: 'edit',
+        formAction: `/activities/${id}/edit`,
+        values: dto,
+        error: err.message,
+      })
+    }
+  }
+
+  @Public()
+  @UseGuards(WebAuthGuard)
+  @Post(':id/delete')
+  public async deleteManual(
+    @CurrentUser() user: User,
+    @Param('id') id: string,
+    @Res() res: Response,
+  ) {
+    try {
+      await this.activitiesService.deleteManualActivity(user.id, id)
+      return res.redirect('/dashboard')
+    } catch (err) {
+      if (err instanceof NotFoundException) {
+        return res.redirect('/activities')
+      }
+      throw err
+    }
   }
 
   @Public()

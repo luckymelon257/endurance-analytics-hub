@@ -8,6 +8,7 @@ export type ActivitySportType = 'RUNNING' | 'CYCLING' | 'SWIMMING' | 'ROWING' | 
 export interface ActivitySummary {
   id: string
   title: string
+  isManual: boolean
   sportType: ActivitySportType
   /** ISO 8601 string. Stored as DateTime server-side, serialized for transport. */
   startedAt: string | null

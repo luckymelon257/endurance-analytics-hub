@@ -1,0 +1,93 @@
+<%- include('../partials/head', { title }) %>
+<%- include('../partials/navbar', { user }) %>
+
+<main class="mx-auto flex min-h-screen max-w-3xl flex-col px-4 py-8 sm:px-6 lg:px-8">
+  <header class="mb-6">
+    <h1 class="text-2xl font-bold tracking-tight text-ink sm:text-3xl">
+      <%= mode === 'edit' ? 'Edit manual activity' : 'Add manual activity' %>
+    </h1>
+    <p class="mt-1 text-sm text-ink-muted">Manual activities are editable and remain private to your account.</p>
+  </header>
+
+  <% if (error) { %>
+    <div class="mb-4 rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
+      <%= error %>
+    </div>
+  <% } %>
+
+  <form method="POST" action="<%= formAction %>" class="space-y-4 rounded-2xl bg-card p-5 shadow-sm ring-1 ring-border">
+    <div>
+      <label class="mb-1 block text-sm font-medium text-ink" for="title">Title</label>
+      <input
+        id="title"
+        name="title"
+        type="text"
+        required
+        maxlength="200"
+        value="<%= values.title ?? '' %>"
+        class="w-full rounded-xl border border-border bg-stone-50 px-3 py-2 text-sm text-ink outline-none focus:ring-2 focus:ring-brand"
+      />
+    </div>
+
+    <div>
+      <label class="mb-1 block text-sm font-medium text-ink" for="sportType">Sport type</label>
+      <select
+        id="sportType"
+        name="sportType"
+        class="w-full rounded-xl border border-border bg-stone-50 px-3 py-2 text-sm text-ink outline-none focus:ring-2 focus:ring-brand"
+      >
+        <% ['RUNNING', 'CYCLING', 'SWIMMING', 'OTHER'].forEach((option) => { %>
+          <option value="<%= option %>" <%= values.sportType === option ? 'selected' : '' %>><%= option %></option>
+        <% }) %>
+      </select>
+    </div>
+
+    <div class="grid gap-4 sm:grid-cols-2">
+      <div>
+        <label class="mb-1 block text-sm font-medium text-ink" for="startedAt">Started at</label>
+        <input
+          id="startedAt"
+          name="startedAt"
+          type="datetime-local"
+          value="<%= values.startedAt ?? '' %>"
+          class="w-full rounded-xl border border-border bg-stone-50 px-3 py-2 text-sm text-ink outline-none focus:ring-2 focus:ring-brand"
+        />
+      </div>
+
+      <div>
+        <label class="mb-1 block text-sm font-medium text-ink" for="durationMinutes">Duration (minutes)</label>
+        <input
+          id="durationMinutes"
+          name="durationMinutes"
+          type="number"
+          min="0"
+          step="0.1"
+          value="<%= values.durationMinutes ?? '' %>"
+          class="w-full rounded-xl border border-border bg-stone-50 px-3 py-2 text-sm text-ink outline-none focus:ring-2 focus:ring-brand"
+        />
+      </div>
+    </div>
+
+    <div>
+      <label class="mb-1 block text-sm font-medium text-ink" for="distanceKm">Distance (km)</label>
+      <input
+        id="distanceKm"
+        name="distanceKm"
+        type="number"
+        min="0"
+        step="0.01"
+        value="<%= values.distanceKm ?? '' %>"
+        class="w-full rounded-xl border border-border bg-stone-50 px-3 py-2 text-sm text-ink outline-none focus:ring-2 focus:ring-brand"
+      />
+    </div>
+
+    <div class="flex items-center gap-3 pt-2">
+      <button type="submit" class="rounded-lg bg-brand px-4 py-2 text-sm font-semibold text-white shadow-sm transition hover:bg-brand-700">
+        <%= mode === 'edit' ? 'Save changes' : 'Create activity' %>
+      </button>
+      <a href="/dashboard" class="text-sm font-medium text-ink-muted hover:text-ink">Cancel</a>
+    </div>
+  </form>
+</main>
+
+<%- include('../partials/footer') %>

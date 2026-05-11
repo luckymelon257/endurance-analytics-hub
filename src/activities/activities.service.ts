@@ -1,8 +1,9 @@
-import { Injectable, Logger, NotFoundException } from '@nestjs/common'
+import { BadRequestException, Injectable, Logger, NotFoundException } from '@nestjs/common'
 import { Activity } from '@prisma/client'
 import { PrismaService } from '../prisma/prisma.service'
 import { StravaApiClient } from '../strava/strava-api.client'
 import { StravaService } from '../strava/strava.service'
+import { ManualActivityDto } from './dto/manual-activity.dto'
 import {
   ActivityDetail,
   ActivitySportType,
@@ -28,6 +29,85 @@ export class ActivitiesService {
     private readonly stravaService: StravaService,
     private readonly stravaApi: StravaApiClient,
   ) {}
+
+  public async createManualActivity(userId: string, dto: ManualActivityDto): Promise<string> {
+    const created = await this.prisma.activity.create({
+      data: {
+        userId,
+        isManual: true,
+        externalId: null,
+        status: 'COMPLETED',
+        title: dto.title.trim(),
+        sportType: dto.sportType,
+        startedAt: parseStartedAt(dto.startedAt),
+        durationSeconds: parseDurationSeconds(dto.durationMinutes),
+        distanceMeters: parseDistanceMeters(dto.distanceKm),
+      },
+      select: { id: true },
+    })
+    return created.id
+  }
+
+  public async getManualActivityForEdit(userId: string, activityId: string): Promise<ManualActivityFormData> {
+    const row = await this.prisma.activity.findFirst({
+      where: { id: activityId, userId, isManual: true },
+      select: {
+        id: true,
+        title: true,
+        isManual: true,
+        sportType: true,
+        startedAt: true,
+        durationSeconds: true,
+        distanceMeters: true,
+      },
+    })
+    if (!row) {
+      throw new NotFoundException('Activity not found')
+    }
+
+    return {
+      id: row.id,
+      title: row.title,
+      sportType: row.sportType as ManualActivityDto['sportType'],
+      startedAt: row.startedAt ? toDateTimeLocal(row.startedAt) : '',
+      durationMinutes: row.durationSeconds !== null ? String(Math.round(row.durationSeconds / 60)) : '',
+      distanceKm: row.distanceMeters !== null ? String((row.distanceMeters / 1000).toFixed(2)) : '',
+    }
+  }
+
+  public async updateManualActivity(
+    userId: string,
+    activityId: string,
+    dto: ManualActivityDto,
+  ): Promise<void> {
+    const row = await this.prisma.activity.findFirst({
+      where: { id: activityId, userId, isManual: true },
+      select: { id: true },
+    })
+    if (!row) {
+      throw new NotFoundException('Activity not found')
+    }
+
+    await this.prisma.activity.update({
+      where: { id: row.id },
+      data: {
+        title: dto.title.trim(),
+        sportType: dto.sportType,
+        startedAt: parseStartedAt(dto.startedAt),
+        durationSeconds: parseDurationSeconds(dto.durationMinutes),
+        distanceMeters: parseDistanceMeters(dto.distanceKm),
+      },
+    })
+  }
+
+  public async deleteManualActivity(userId: string, activityId: string): Promise<void> {
+    const deleted = await this.prisma.activity.deleteMany({
+      where: { id: activityId, userId, isManual: true },
+    })
+    if (deleted.count === 0) {
+      throw new NotFoundException('Activity not found')
+    }
+  }
 
   /**
    * Thin orchestrator that fans out to windowed methods. Each window
@@ -168,6 +248,7 @@ export class ActivitiesService {
       select: {
         id: true,
         title: true,
+        isManual: true,
         sportType: true,
         startedAt: true,
         durationSeconds: true,
@@ -179,6 +260,7 @@ export class ActivitiesService {
     return rows.map((r) => ({
       id: r.id,
       title: r.title,
+      isManual: r.isManual,
       sportType: r.sportType as ActivitySportType,
       startedAt: r.startedAt ? r.startedAt.toISOString() : null,
       durationSeconds: r.durationSeconds,
@@ -250,6 +332,7 @@ export class ActivitiesService {
       activity: {
         id: row.id,
         title: row.title,
+        isManual: row.isManual,
         sportType: row.sportType as ActivitySportType,
         startedAt: row.startedAt ? row.startedAt.toISOString() : null,
         durationSeconds: row.durationSeconds,
@@ -327,6 +410,7 @@ export class ActivitiesService {
       select: {
         id: true,
         title: true,
+        isManual: true,
         sportType: true,
         startedAt: true,
         durationSeconds: true,
@@ -341,6 +425,7 @@ export class ActivitiesService {
     const items = sliced.map((r) => ({
       id: r.id,
       title: r.title,
+      isManual: r.isManual,
       sportType: r.sportType as ActivitySportType,
       startedAt: r.startedAt ? r.startedAt.toISOString() : null,
       durationSeconds: r.durationSeconds,
@@ -364,6 +449,15 @@ export class ActivitiesService {
 export interface PageOfActivities {
   items: ActivitySummary[]
   nextCursor: string | null
+}
+
+export interface ManualActivityFormData {
+  id: string
+  title: string
+  sportType: ManualActivityDto['sportType']
+  startedAt: string
+  durationMinutes: string
+  distanceKm: string
 }
 
 interface DecodedCursor {
@@ -414,4 +508,40 @@ function formatDateKeyUtc(d: Date): string {
   const m = String(d.getUTCMonth() + 1).padStart(2, '0')
   const day = String(d.getUTCDate()).padStart(2, '0')
   return `${y}-${m}-${day}`
+}
+
+function parseStartedAt(value: string | undefined): Date | null {
+  if (!value || value.trim() === '') return null
+  const parsed = new Date(value)
+  if (Number.isNaN(parsed.getTime())) {
+    throw new BadRequestException('Invalid startedAt value')
+  }
+  return parsed
+}
+
+function parseDurationSeconds(value: string | undefined): number | null {
+  if (!value || value.trim() === '') return null
+  const parsed = Number(value)
+  if (!Number.isFinite(parsed) || parsed <= 0) {
+    throw new BadRequestException('Duration must be a positive number')
+  }
+  return Math.round(parsed * 60)
+}
+
+function parseDistanceMeters(value: string | undefined): number | null {
+  if (!value || value.trim() === '') return null
+  const parsed = Number(value)
+  if (!Number.isFinite(parsed) || parsed < 0) {
+    throw new BadRequestException('Distance must be zero or positive')
+  }
+  return parsed * 1000
+}
+
+function toDateTimeLocal(date: Date): string {
+  const year = date.getFullYear()
+  const month = String(date.getMonth() + 1).padStart(2, '0')
+  const day = String(date.getDate()).padStart(2, '0')
+  const hours = String(date.getHours()).padStart(2, '0')
+  const minutes = String(date.getMinutes()).padStart(2, '0')
+  return `${year}-${month}-${day}T${hours}:${minutes}`
 }

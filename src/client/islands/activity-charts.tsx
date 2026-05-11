@@ -24,6 +24,12 @@ interface ActivityChartsProps {
 const SYNC_ID = 'activity-charts'
 
 export default function ActivityCharts({ activity, streams, streamsError }: ActivityChartsProps) {
+  if (activity.isManual) {
+    return (
+      <ChartsUnavailable message="Detailed telemetry is unavailable because this activity was added manually." />
+    )
+  }
+
   if (!streams) {
     return <ChartsUnavailable message={streamsError ?? 'No detailed data for this activity.'} />
   }
@@ -198,9 +204,12 @@ function ChartCard<R>({ title, unit, emptyText, rows, children }: ChartCardProps
 
 function ChartsUnavailable({ message }: { message: string }) {
   return (
-    <div className="rounded-2xl bg-card p-8 text-center shadow-sm ring-1 ring-border">
-      <p className="text-3xl" aria-hidden="true">📈</p>
-      <p className="mt-3 text-sm text-ink-muted">{message}</p>
+    <div className="rounded-2xl border border-dashed border-border bg-gradient-to-br from-stone-50 to-white p-8 text-center shadow-sm">
+      <p className="mx-auto flex h-12 w-12 items-center justify-center rounded-full bg-white text-2xl shadow-sm ring-1 ring-border" aria-hidden="true">
+        📈
+      </p>
+      <p className="mt-4 text-sm font-medium text-ink">Charts unavailable</p>
+      <p className="mx-auto mt-1 max-w-xl text-sm text-ink-muted">{message}</p>
     </div>
   )
 }
