@@ -33,6 +33,20 @@ enum UserStatus {
   BANNED
 }
 
+enum BackfillMode {
+  WINDOW_1Y
+  FULL
+}
+
+enum BackfillStatus {
+  QUEUED
+  RUNNING
+  RATE_LIMITED
+  COMPLETED
+  FAILED
+  CANCELED
+}
+
 model User {
   id              String   @id @default(uuid())
   email           String   @unique
@@ -48,6 +62,7 @@ model User {
   activities     Activity[]
   trainingBlocks TrainingBlock[]
   stravaAccount  StravaAccount?
+  backfillJobs   BackfillJob[]
 
   @@map("users")
 }
@@ -113,6 +128,7 @@ model Activity {
   laps           ActivityLap[]
   streamSet      ActivityStreamSet?
 
+  @@index([userId, startedAt(sort: Desc)])
   @@unique([userId, externalId])
   @@map("activities")
 }
@@ -156,4 +172,24 @@ model ActivityLap {
   activity Activity @relation(fields: [activityId], references: [id], onDelete: Cascade)
 
   @@map("activity_laps")
+}
+
+model BackfillJob {
+  id              String         @id @default(uuid())
+  userId          String
+  mode            BackfillMode
+  status          BackfillStatus @default(QUEUED)
+  lastPageFetched Int            @default(0)
+  imported        Int            @default(0)
+  retryAfter      DateTime?
+  error           String?
+  enqueuedAt      DateTime       @default(now())
+  startedAt       DateTime?
+  completedAt     DateTime?
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, status])
+  @@index([status, enqueuedAt])
+  @@map("backfill_jobs")
 }
