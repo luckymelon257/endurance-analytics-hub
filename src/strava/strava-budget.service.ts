@@ -60,7 +60,17 @@ export class StravaBudgetService implements OnModuleDestroy {
       return { ok: false, retryAfterSeconds: this.nextWindowResetSeconds() + 30 }
     }
 
-    const inFlight = results[0]?.[1] as number
+    // Fail-closed on any per-command Redis error or unexpected return type.
+    const incrErr = results[0]?.[0]
+    const incrVal = results[0]?.[1]
+    if (incrErr || typeof incrVal !== 'number') {
+      this.logger.warn(
+        `Budget pipeline INCR failed or returned non-number: ${incrErr?.message ?? String(incrVal)}`,
+      )
+      return { ok: false, retryAfterSeconds: this.nextWindowResetSeconds() + 30 }
+    }
+
+    const inFlight = incrVal
     const usage15Raw = results[2]?.[1] as string | null
     const usageDailyRaw = results[3]?.[1] as string | null
 
@@ -121,7 +131,7 @@ export class StravaBudgetService implements OnModuleDestroy {
   }
 
   /** Seconds until the next wall-clock 15-min boundary. Strava's windows align to these. */
-  private nextWindowResetSeconds(): number {
+  public nextWindowResetSeconds(): number {
     const now = new Date()
     const minutes = now.getUTCMinutes()
     const nextBoundaryMin = Math.ceil((minutes + 1) / 15) * 15

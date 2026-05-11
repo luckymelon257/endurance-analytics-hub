@@ -106,7 +106,13 @@ export class StravaApiClient {
     if (!gate.ok) {
       throw new StravaRateLimitedError(gate.retryAfterSeconds)
     }
-    const res = await fetch(url, { headers: { Authorization: `Bearer ${accessToken}` } })
+    let res: Response
+    try {
+      res = await fetch(url, { headers: { Authorization: `Bearer ${accessToken}` } })
+    } catch (err) {
+      await this.budget.releaseReservation()
+      throw err
+    }
     await this.afterFetch(res)
     await this.throwIfRateLimited(res)
     if (!res.ok) {
@@ -125,7 +131,13 @@ export class StravaApiClient {
     if (!gate.ok) {
       throw new StravaRateLimitedError(gate.retryAfterSeconds)
     }
-    const res = await fetch(url, { headers: { Authorization: `Bearer ${accessToken}` } })
+    let res: Response
+    try {
+      res = await fetch(url, { headers: { Authorization: `Bearer ${accessToken}` } })
+    } catch (err) {
+      await this.budget.releaseReservation()
+      throw err
+    }
     await this.afterFetch(res)
     if (res.status === 404) return null
     await this.throwIfRateLimited(res)
@@ -148,7 +160,9 @@ export class StravaApiClient {
     if (res.status !== 429) return
     const retryAfter = Number(res.headers.get('retry-after'))
     const retrySeconds =
-      Number.isFinite(retryAfter) && retryAfter > 0 ? Math.floor(retryAfter) : 900 + 30
+      Number.isFinite(retryAfter) && retryAfter > 0
+        ? Math.floor(retryAfter)
+        : this.budget.nextWindowResetSeconds() + 30
     throw new StravaRateLimitedError(retrySeconds)
   }
 }
