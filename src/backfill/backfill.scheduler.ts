@@ -20,6 +20,7 @@ export class BackfillScheduler {
    * Nest's @Cron does not overlap by default; the Redis lock in the runner
    * provides a second line of defense for multi-instance scaling.
    */
+  // Cron expression is a literal at compile time; change here if you need a different tick.
   @Cron(CronExpression.EVERY_30_SECONDS)
   public async tick(): Promise<void> {
     try {

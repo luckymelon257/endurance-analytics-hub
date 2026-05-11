@@ -41,7 +41,7 @@ export class StravaApiClient {
       method: 'POST',
       headers: { Authorization: `Bearer ${accessToken}` },
     })
-    await this.afterFetch(res)
+    await this.afterFetchUngated(res)
     if (!res.ok) {
       throw new InternalServerErrorException(`Strava deauthorize failed: ${res.status}`)
     }
@@ -92,7 +92,7 @@ export class StravaApiClient {
       headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
       body: new URLSearchParams(body).toString(),
     })
-    await this.afterFetch(res)
+    await this.afterFetchUngated(res)
     await this.throwIfRateLimited(res)
     if (!res.ok) {
       const text = await res.text().catch(() => '')
@@ -153,6 +153,18 @@ export class StravaApiClient {
       await this.budget.recordResponse(res.headers)
     } catch {
       // Don't let a Redis hiccup abort a Strava response. TTL self-heals leaked reservations.
+    }
+  }
+
+  /**
+   * For calls that bypass the gate (no INCR happened): record usage headers
+   * but skip the DECR so we don't push strava:in_flight negative.
+   */
+  private async afterFetchUngated(res: Response): Promise<void> {
+    try {
+      await this.budget.recordResponse(res.headers, { hadReservation: false })
+    } catch {
+      // Same fail-soft policy as afterFetch.
     }
   }
 

@@ -93,12 +93,24 @@ export class StravaBudgetService implements OnModuleDestroy {
 
   /**
    * Called from StravaApiClient after every fetch (success or error, as long
-   * as headers exist). DECRs the in-flight counter that canStartRequest INCRed,
-   * and persists the observed usage from response headers.
+   * as headers exist). DECRs the in-flight counter that canStartRequest INCRed
+   * (only when `hadReservation` is true), and persists the observed usage from
+   * response headers. Ungated callers (token refresh, deauthorize) must pass
+   * `{ hadReservation: false }` so we don't push the counter negative.
    */
-  public async recordResponse(headers: Headers | Record<string, string>): Promise<void> {
-    await this.redis.decr(stravaInFlightKey())
+  public async recordResponse(
+    headers: Headers | Record<string, string>,
+    options: { hadReservation?: boolean } = {},
+  ): Promise<void> {
+    if (options.hadReservation !== false) {
+      await this.redis.decr(stravaInFlightKey())
+    }
+    await this.writeUsageFromHeaders(headers)
+  }
 
+  private async writeUsageFromHeaders(
+    headers: Headers | Record<string, string>,
+  ): Promise<void> {
     const usage = this.headerValue(headers, 'x-ratelimit-usage')
     const limit = this.headerValue(headers, 'x-ratelimit-limit')
     if (!usage || !limit) return
