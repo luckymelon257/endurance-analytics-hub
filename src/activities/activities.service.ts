@@ -260,35 +260,6 @@ export class ActivitiesService {
     }
   }
 
-  public async listForUser(userId: string, take = 30): Promise<ActivitySummary[]> {
-    const rows = await this.prisma.activity.findMany({
-      where: { userId },
-      orderBy: { startedAt: 'desc' },
-      take,
-      select: {
-        id: true,
-        title: true,
-        sportType: true,
-        startedAt: true,
-        durationSeconds: true,
-        distanceMeters: true,
-        avgHeartRate: true,
-        avgPaceSecondsPerKm: true,
-      },
-    })
-
-    return rows.map((r) => ({
-      id: r.id,
-      title: r.title,
-      sportType: r.sportType as ActivitySportType,
-      startedAt: r.startedAt ? r.startedAt.toISOString() : null,
-      durationSeconds: r.durationSeconds,
-      distanceMeters: r.distanceMeters,
-      avgHeartRate: r.avgHeartRate,
-      avgPaceSecondsPerKm: r.avgPaceSecondsPerKm,
-    }))
-  }
-
   /**
    * Cursor-paginated list of activities. Cursor encodes (startedAt, id) of the
    * last item on the previous page. We use row-tuple comparison so ordering

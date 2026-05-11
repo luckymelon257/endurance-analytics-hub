@@ -4,7 +4,6 @@
  * one-liner; the mount runtime in main.ts picks it up automatically.
  */
 export const islandRegistry = {
-  'activities-list': () => import('./activities-list'),
   'activity-charts': () => import('./activity-charts'),
   'training-heatmap': () => import('./training-heatmap'),
   'weekly-volume': () => import('./weekly-volume'),
