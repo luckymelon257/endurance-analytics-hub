@@ -1,7 +1,4 @@
-version: '3.8'
-
 services:
-  # PostgreSQL Database
   db:
     image: postgres:15-alpine
     container_name: endurance_pg
@@ -14,8 +11,13 @@ services:
       - '5432:5432'
     volumes:
       - pgdata:/var/lib/postgresql/data
+      - ./scripts/init-db:/docker-entrypoint-initdb.d:ro
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -U admin -d endurance_db']
+      interval: 5s
+      timeout: 5s
+      retries: 10
 
-  # Redis Cache
   redis:
     image: redis:7-alpine
     container_name: endurance_redis
@@ -24,7 +26,89 @@ services:
       - '6379:6379'
     volumes:
       - redisdata:/data
+    healthcheck:
+      test: ['CMD', 'redis-cli', 'ping']
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  redpanda:
+    image: redpandadata/redpanda:latest
+    container_name: endurance_redpanda
+    restart: always
+    command:
+      - redpanda
+      - start
+      - --smp=1
+      - --memory=1G
+      - --reserve-memory=0M
+      - --overprovisioned
+      - --node-id=0
+      - --check=false
+      - --kafka-addr=PLAINTEXT://0.0.0.0:9092,OUTSIDE://0.0.0.0:19092
+      - --advertise-kafka-addr=PLAINTEXT://redpanda:9092,OUTSIDE://localhost:19092
+      - --pandaproxy-addr=0.0.0.0:8082
+      - --advertise-pandaproxy-addr=localhost:8082
+    ports:
+      - '9092:9092'
+      - '19092:19092'
+      - '9644:9644'
+    volumes:
+      - redpandadata:/var/lib/redpanda/data
+    healthcheck:
+      test: ['CMD-SHELL', 'rpk cluster info --brokers=localhost:9092 || exit 1']
+      interval: 10s
+      timeout: 5s
+      retries: 10
+
+  web-gateway:
+    build:
+      context: .
+      dockerfile: apps/web-gateway/Dockerfile
+    container_name: endurance_web_gateway
+    restart: unless-stopped
+    env_file:
+      - ./apps/web-gateway/.env
+    environment:
+      NODE_ENV: production
+      DATABASE_URL: postgresql://admin:password123@db:5432/endurance_db?schema=public
+      REDIS_URL: redis://redis:6379
+      KAFKA_BROKERS: redpanda:9092
+      ANALYTICS_GRPC_URL: analytics-engine:50051
+      PROTO_PATH: /app/shared/proto/analytics.proto
+    ports:
+      - '3000:3000'
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      redpanda:
+        condition: service_started
+
+  analytics-engine:
+    build:
+      context: ./apps/analytics-engine
+    container_name: endurance_analytics_engine
+    restart: unless-stopped
+    env_file:
+      - ./apps/analytics-engine/.env
+    environment:
+      HTTP_ADDR: ':8080'
+      GRPC_ADDR: ':50051'
+      DATABASE_URL: postgresql://admin:password123@db:5432/analytics_db
+      KAFKA_BROKERS: redpanda:9092
+      KAFKA_CONSUMER_GROUP: analytics-engine
+    ports:
+      - '8080:8080'
+      - '50051:50051'
+    depends_on:
+      db:
+        condition: service_healthy
+      redpanda:
+        condition: service_started
 
 volumes:
   pgdata:
   redisdata:
+  redpandadata:

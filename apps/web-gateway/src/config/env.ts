@@ -1,10 +1,17 @@
 import 'dotenv/config'
+import path from 'node:path'
 import type { StringValue } from 'ms'
 
 function required(name: string): string {
   const value = process.env[name]
   if (!value) throw new Error(`Missing required env var: ${name}`)
   return value
+}
+
+function envArray(name: string, fallback: string[] = []): string[] {
+  const raw = process.env[name]
+  if (!raw) return fallback
+  return raw.split(',').map((s) => s.trim()).filter(Boolean)
 }
 
 // App
@@ -25,6 +32,12 @@ export const STRAVA_CLIENT_ID = required('STRAVA_CLIENT_ID')
 export const STRAVA_CLIENT_SECRET = required('STRAVA_CLIENT_SECRET')
 export const STRAVA_REDIRECT_URL =
   process.env.STRAVA_REDIRECT_URI ?? `${APP_URL}/auth/strava/callback`
+
+// Analytics engine (Kafka producer + gRPC client)
+export const KAFKA_BROKERS = envArray('KAFKA_BROKERS', ['localhost:19092'])
+export const ANALYTICS_GRPC_URL = process.env.ANALYTICS_GRPC_URL ?? 'localhost:50051'
+export const PROTO_PATH =
+  process.env.PROTO_PATH ?? path.resolve(__dirname, '../../../../shared/proto/analytics.proto')
 
 // Backfill
 

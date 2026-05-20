@@ -1,0 +1,38 @@
+syntax = "proto3";
+
+package analytics;
+
+option go_package = "endurance-hub/analytics/internal/infra/pb;analyticspb";
+
+service AnalyticsService {
+  rpc GetActivityInsights(InsightsRequest) returns (InsightsResponse);
+}
+
+message InsightsRequest {
+  string activity_id = 1;
+  string user_id     = 2;
+}
+
+message PacePoint {
+  int64  time_seconds   = 1;
+  double real_pace      = 2;
+  double predicted_pace = 3;
+}
+
+// A single finding produced by one analyzer in the pipeline. The `type`
+// discriminator (e.g. "AEROBIC_DECOUPLING", "PACING_PENALTY", "TERRAIN")
+// lets the BFF render each insight without the proto knowing the concrete
+// model. Extra fields go in `metadata` as stringified scalars.
+message ActivityInsight {
+  string             type           = 1;
+  string             summary        = 2;
+  double             severity_score = 3;
+  map<string,string> metadata       = 4;
+}
+
+message InsightsResponse {
+  string                   activity_id           = 1;
+  string                   combined_ai_narrative = 2;
+  repeated ActivityInsight discrete_insights     = 3;
+  repeated PacePoint       pacing_chart_data     = 4;
+}

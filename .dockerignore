@@ -1,0 +1,14 @@
+**/node_modules
+**/dist
+**/public/dist
+**/.git
+**/.gitignore
+**/.env
+**/.env.local
+**/.dockerignore
+**/Dockerfile
+**/.idea
+**/.vscode
+**/.DS_Store
+apps/analytics-engine/bin
+apps/analytics-engine/server

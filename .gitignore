@@ -1,4 +1,18 @@
-.env
-node_modules/
-dist/
-public/dist/
+# Node
+**/node_modules/
+**/dist/
+**/public/dist/
+npm-debug.log*
+
+# Env files
+**/.env
+**/.env.local
+
+# Go
+apps/analytics-engine/server
+apps/analytics-engine/bin/
+
+# Editors / OS
+.DS_Store
+.idea/
+.vscode/

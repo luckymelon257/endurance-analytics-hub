@@ -5,6 +5,7 @@ import { ScheduleModule } from '@nestjs/schedule'
 import { AppController } from './app.controller'
 import { AppService } from './app.service'
 import { ActivitiesModule } from './activities/activities.module'
+import { AnalyticsModule } from './analytics/analytics.module'
 import { AuthModule } from './auth/auth.module'
 import { JwtAuthGuard } from './auth/guards/jwt-auth.guard'
 import { BackfillModule } from './backfill/backfill.module'
@@ -23,6 +24,7 @@ import { ViteAssetsModule } from './vite-assets/vite-assets.module'
     CacheModule,
     AuthModule,
     ActivitiesModule,
+    AnalyticsModule,
     StravaModule,
     BackfillModule,
     SettingsModule,

@@ -9,6 +9,7 @@ import { EventEmitter2 } from '@nestjs/event-emitter'
 import { ActivityStatus, SportType, UserStatus } from '@prisma/client'
 import * as bcrypt from 'bcrypt'
 import { randomBytes } from 'crypto'
+import { ActivitySyncedEvent } from '../analytics/events/activity-synced.event'
 import { CacheService } from '../cache/cache.service'
 import { StravaConnectedEvent } from './events/strava-connected.event'
 import { STRAVA_CLIENT_ID, STRAVA_REDIRECT_URL } from '../config/env'
@@ -259,8 +260,15 @@ export class StravaService {
         create: { ...data, userId, externalId },
         update: data,
       })
-      if (result.createdAt.getTime() === result.updatedAt.getTime()) created++
-      else updated++
+      if (result.createdAt.getTime() === result.updatedAt.getTime()) {
+        created++
+        this.events.emit(
+          ActivitySyncedEvent.NAME,
+          new ActivitySyncedEvent(userId, result.id),
+        )
+      } else {
+        updated++
+      }
     }
     return { created, updated }
   }
