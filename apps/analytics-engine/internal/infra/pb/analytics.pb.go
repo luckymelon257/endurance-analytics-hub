@@ -22,11 +22,15 @@ const (
 )
 
 type InsightsRequest struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	ActivityId    string                 `protobuf:"bytes,1,opt,name=activity_id,json=activityId,proto3" json:"activity_id,omitempty"`
-	UserId        string                 `protobuf:"bytes,2,opt,name=user_id,json=userId,proto3" json:"user_id,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
+	state          protoimpl.MessageState `protogen:"open.v1"`
+	ActivityId     string                 `protobuf:"bytes,1,opt,name=activity_id,json=activityId,proto3" json:"activity_id,omitempty"`
+	UserId         string                 `protobuf:"bytes,2,opt,name=user_id,json=userId,proto3" json:"user_id,omitempty"`
+	TimeStream     []int32                `protobuf:"varint,3,rep,packed,name=time_stream,json=timeStream,proto3" json:"time_stream,omitempty"`
+	VelocityStream []float32              `protobuf:"fixed32,4,rep,packed,name=velocity_stream,json=velocityStream,proto3" json:"velocity_stream,omitempty"`
+	HrStream       []int32                `protobuf:"varint,5,rep,packed,name=hr_stream,json=hrStream,proto3" json:"hr_stream,omitempty"`
+	AltitudeStream []float32              `protobuf:"fixed32,6,rep,packed,name=altitude_stream,json=altitudeStream,proto3" json:"altitude_stream,omitempty"`
+	unknownFields  protoimpl.UnknownFields
+	sizeCache      protoimpl.SizeCache
 }
 
 func (x *InsightsRequest) Reset() {
@@ -71,6 +75,34 @@ func (x *InsightsRequest) GetUserId() string {
 		return x.UserId
 	}
 	return ""
+}
+
+func (x *InsightsRequest) GetTimeStream() []int32 {
+	if x != nil {
+		return x.TimeStream
+	}
+	return nil
+}
+
+func (x *InsightsRequest) GetVelocityStream() []float32 {
+	if x != nil {
+		return x.VelocityStream
+	}
+	return nil
+}
+
+func (x *InsightsRequest) GetHrStream() []int32 {
+	if x != nil {
+		return x.HrStream
+	}
+	return nil
+}
+
+func (x *InsightsRequest) GetAltitudeStream() []float32 {
+	if x != nil {
+		return x.AltitudeStream
+	}
+	return nil
 }
 
 type PacePoint struct {
@@ -138,13 +170,14 @@ func (x *PacePoint) GetPredictedPace() float64 {
 // lets the BFF render each insight without the proto knowing the concrete
 // model. Extra fields go in `metadata` as stringified scalars.
 type ActivityInsight struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	Type          string                 `protobuf:"bytes,1,opt,name=type,proto3" json:"type,omitempty"`
-	Summary       string                 `protobuf:"bytes,2,opt,name=summary,proto3" json:"summary,omitempty"`
-	SeverityScore float64                `protobuf:"fixed64,3,opt,name=severity_score,json=severityScore,proto3" json:"severity_score,omitempty"`
-	Metadata      map[string]string      `protobuf:"bytes,4,rep,name=metadata,proto3" json:"metadata,omitempty" protobuf_key:"bytes,1,opt,name=key" protobuf_val:"bytes,2,opt,name=value"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
+	state            protoimpl.MessageState `protogen:"open.v1"`
+	Type             string                 `protobuf:"bytes,1,opt,name=type,proto3" json:"type,omitempty"`
+	Summary          string                 `protobuf:"bytes,2,opt,name=summary,proto3" json:"summary,omitempty"`
+	SeverityScore    float64                `protobuf:"fixed64,3,opt,name=severity_score,json=severityScore,proto3" json:"severity_score,omitempty"`
+	Metadata         map[string]string      `protobuf:"bytes,4,rep,name=metadata,proto3" json:"metadata,omitempty" protobuf_key:"bytes,1,opt,name=key" protobuf_val:"bytes,2,opt,name=value"`
+	PointTimeSeconds int32                  `protobuf:"varint,5,opt,name=point_time_seconds,json=pointTimeSeconds,proto3" json:"point_time_seconds,omitempty"`
+	unknownFields    protoimpl.UnknownFields
+	sizeCache        protoimpl.SizeCache
 }
 
 func (x *ActivityInsight) Reset() {
@@ -203,6 +236,13 @@ func (x *ActivityInsight) GetMetadata() map[string]string {
 		return x.Metadata
 	}
 	return nil
+}
+
+func (x *ActivityInsight) GetPointTimeSeconds() int32 {
+	if x != nil {
+		return x.PointTimeSeconds
+	}
+	return 0
 }
 
 type InsightsResponse struct {
@@ -277,20 +317,26 @@ var File_analytics_proto protoreflect.FileDescriptor
 
 const file_analytics_proto_rawDesc = "" +
 	"\n" +
-	"\x0fanalytics.proto\x12\tanalytics\"K\n" +
+	"\x0fanalytics.proto\x12\tanalytics\"\xdb\x01\n" +
 	"\x0fInsightsRequest\x12\x1f\n" +
 	"\vactivity_id\x18\x01 \x01(\tR\n" +
 	"activityId\x12\x17\n" +
-	"\auser_id\x18\x02 \x01(\tR\x06userId\"r\n" +
+	"\auser_id\x18\x02 \x01(\tR\x06userId\x12\x1f\n" +
+	"\vtime_stream\x18\x03 \x03(\x05R\n" +
+	"timeStream\x12'\n" +
+	"\x0fvelocity_stream\x18\x04 \x03(\x02R\x0evelocityStream\x12\x1b\n" +
+	"\thr_stream\x18\x05 \x03(\x05R\bhrStream\x12'\n" +
+	"\x0faltitude_stream\x18\x06 \x03(\x02R\x0ealtitudeStream\"r\n" +
 	"\tPacePoint\x12!\n" +
 	"\ftime_seconds\x18\x01 \x01(\x03R\vtimeSeconds\x12\x1b\n" +
 	"\treal_pace\x18\x02 \x01(\x01R\brealPace\x12%\n" +
-	"\x0epredicted_pace\x18\x03 \x01(\x01R\rpredictedPace\"\xe9\x01\n" +
+	"\x0epredicted_pace\x18\x03 \x01(\x01R\rpredictedPace\"\x97\x02\n" +
 	"\x0fActivityInsight\x12\x12\n" +
 	"\x04type\x18\x01 \x01(\tR\x04type\x12\x18\n" +
 	"\asummary\x18\x02 \x01(\tR\asummary\x12%\n" +
 	"\x0eseverity_score\x18\x03 \x01(\x01R\rseverityScore\x12D\n" +
-	"\bmetadata\x18\x04 \x03(\v2(.analytics.ActivityInsight.MetadataEntryR\bmetadata\x1a;\n" +
+	"\bmetadata\x18\x04 \x03(\v2(.analytics.ActivityInsight.MetadataEntryR\bmetadata\x12,\n" +
+	"\x12point_time_seconds\x18\x05 \x01(\x05R\x10pointTimeSeconds\x1a;\n" +
 	"\rMetadataEntry\x12\x10\n" +
 	"\x03key\x18\x01 \x01(\tR\x03key\x12\x14\n" +
 	"\x05value\x18\x02 \x01(\tR\x05value:\x028\x01\"\xf2\x01\n" +

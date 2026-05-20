@@ -11,6 +11,10 @@ service AnalyticsService {
 message InsightsRequest {
   string activity_id = 1;
   string user_id     = 2;
+  repeated int32 time_stream     = 3;
+  repeated float velocity_stream = 4;
+  repeated int32 hr_stream       = 5;
+  repeated float altitude_stream = 6;
 }
 
 message PacePoint {
@@ -24,10 +28,11 @@ message PacePoint {
 // lets the BFF render each insight without the proto knowing the concrete
 // model. Extra fields go in `metadata` as stringified scalars.
 message ActivityInsight {
-  string             type           = 1;
-  string             summary        = 2;
-  double             severity_score = 3;
-  map<string,string> metadata       = 4;
+  string             type               = 1;
+  string             summary            = 2;
+  double             severity_score     = 3;
+  map<string,string> metadata           = 4;
+  int32              point_time_seconds = 5;
 }
 
 message InsightsResponse {

@@ -32,13 +32,17 @@ func NewWithEngine(engine *math.Engine) *AnalyticsServer {
 func (s *AnalyticsServer) Engine() *math.Engine { return s.engine }
 
 func (s *AnalyticsServer) GetActivityInsights(
-	_ context.Context,
+	ctx context.Context,
 	req *analyticspb.InsightsRequest,
 ) (*analyticspb.InsightsResponse, error) {
 	log.Printf("[gRPC] GetActivityInsights activity_id=%s user_id=%s", req.GetActivityId(), req.GetUserId())
 
 	insights := s.engine.RunAll(req)
-	narrative := ai.GenerateHolisticNarrative(insights)
+	narrative, err := ai.GenerateHolisticNarrative(ctx, insights)
+	if err != nil {
+		log.Printf("[gRPC] narrative fallback used: %v", err)
+		// narrative already contains the fallback string; keep it.
+	}
 
 	return &analyticspb.InsightsResponse{
 		ActivityId:           req.GetActivityId(),

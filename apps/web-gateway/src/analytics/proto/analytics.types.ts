@@ -3,6 +3,10 @@ import type { Observable } from 'rxjs'
 export interface InsightsRequest {
   activityId: string
   userId: string
+  timeStream?: number[]
+  velocityStream?: number[]
+  hrStream?: number[]
+  altitudeStream?: number[]
 }
 
 export interface PacePoint {
@@ -19,6 +23,7 @@ export interface ActivityInsight {
   summary: string
   severityScore: number
   metadata: Record<string, string>
+  pointTimeSeconds?: number
 }
 
 export interface InsightsResponse {
